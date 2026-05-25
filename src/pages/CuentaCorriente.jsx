@@ -72,7 +72,80 @@ export default function CuentaCorriente() {
   const pacienteActual = pacientes.find(p => p.id === pacienteId)
 
   const today = new Date().toISOString().split('T')[0]
+function imprimir() {
+  const pac = pacientes.find(p => p.id === pacienteId)
+  let html = `
+    <html><head><meta charset="utf-8">
+    <title>Cuenta corriente — ${pac?.nombre}</title>
+    <style>
+      body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 24px; }
+      h1 { font-size: 15px; margin: 0 0 4px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 10px; }
+      th { background: #f5f5f5; padding: 5px 8px; border-bottom: 1px solid #ccc; text-align: left; }
+      td { padding: 5px 8px; border-bottom: 1px solid #eee; }
+      .num { text-align: right; }
+      .total { font-weight: bold; background: #f5f5f5; }
+      .header { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 14px; }
+      .firma { display: flex; justify-content: space-between; margin-top: 40px; }
+      .firma-line { border-top: 1px solid #999; padding-top: 4px; width: 200px; text-align: center; font-size: 10px; }
+      .rojo { color: #c0392b; }
+      .verde { color: #1D9E75; }
+    </style></head><body>
+    <div class="header">
+      <div>
+        <h1>Cuenta corriente — ${pac?.nombre}</h1>
+        <p style="margin:2px 0;color:#555">Obra social: ${pac?.obra_social || 'Particular'}</p>
+        <p style="margin:2px 0;color:#555">N° afiliado: ${pac?.nro_afiliado || '—'}</p>
+      </div>
+      <div style="text-align:right;color:#888;font-size:10px">
+        <p>Fecha de emisión: ${new Date().toLocaleDateString('es-AR')}</p>
+      </div>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Fecha</th>
+        <th>Concepto</th>
+        <th>Diente</th>
+        <th>Tipo</th>
+        <th class="num">Debe ($)</th>
+        <th class="num">Haber ($)</th>
+        <th class="num">Saldo ($)</th>
+      </tr></thead>
+      <tbody>`
 
+  conSaldo.forEach(m => {
+    html += `<tr>
+      <td>${m.fecha?.split('-').reverse().join('/')}</td>
+      <td>${m.concepto}${m.obs ? ' — ' + m.obs : ''}</td>
+      <td style="text-align:center">${m.diente || '—'}</td>
+      <td>${m.tipo === 'debe' ? 'Prestación' : 'Pago'}</td>
+      <td class="num ${m.tipo === 'debe' ? 'rojo' : ''}">${m.tipo === 'debe' ? '$' + Math.round(m.importe).toLocaleString('es-AR') : '—'}</td>
+      <td class="num ${m.tipo === 'haber' ? 'verde' : ''}">${m.tipo === 'haber' ? '$' + Math.round(m.importe).toLocaleString('es-AR') : '—'}</td>
+      <td class="num ${m.saldo > 0 ? 'rojo' : 'verde'}">${'$' + Math.round(Math.abs(m.saldo)).toLocaleString('es-AR')} ${m.saldo > 0 ? 'D' : m.saldo < 0 ? 'H' : ''}</td>
+    </tr>`
+  })
+
+  html += `</tbody>
+    <tfoot>
+      <tr class="total">
+        <td colspan="4">TOTAL</td>
+        <td class="num rojo">$${Math.round(totalDebe).toLocaleString('es-AR')}</td>
+        <td class="num verde">$${Math.round(totalHaber).toLocaleString('es-AR')}</td>
+        <td class="num ${saldoFinal > 0 ? 'rojo' : 'verde'}">$${Math.round(Math.abs(saldoFinal)).toLocaleString('es-AR')} ${saldoFinal > 0 ? 'D' : 'H'}</td>
+      </tr>
+    </tfoot>
+    </table>
+    <div class="firma">
+      <div class="firma-line">Firma del profesional</div>
+      <div class="firma-line">Sello</div>
+    </div>
+    </body></html>`
+
+  const win = window.open('', '_blank', 'width=900,height=700')
+  win.document.write(html)
+  win.document.close()
+  setTimeout(() => win.print(), 500)
+}
   return (
     <div style={{ padding:'28px' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
@@ -83,7 +156,18 @@ export default function CuentaCorriente() {
         <button onClick={() => setShowForm(!showForm)}
           style={{ padding:'9px 18px', background:'#378ADD', color:'#fff', border:'none',
             borderRadius:'8px', fontSize:'13px', cursor:'pointer', fontWeight:'500' }}>
-          + Nuevo movimiento
+              <div style={{ display:'flex', gap:'8px' }}>
+  <button onClick={() => setShowForm(!showForm)}
+    style={{ padding:'9px 18px', background:'#378ADD', color:'#fff', border:'none',
+      borderRadius:'8px', fontSize:'13px', cursor:'pointer', fontWeight:'500' }}>
+    + Nuevo movimiento
+  </button>
+  <button onClick={imprimir}
+    style={{ padding:'9px 18px', background:'#fff', color:'#333', border:'1px solid #ddd',
+      borderRadius:'8px', fontSize:'13px', cursor:'pointer', fontWeight:'500' }}>
+    🖨️ Imprimir
+  </button>
+</div>
         </button>
       </div>
 
