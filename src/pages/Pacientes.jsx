@@ -5,10 +5,12 @@ const ANTECEDENTES = ['Diabetes','Hipertensión','Alergia a anestesia','Cardiopa
 
 const FORM_VACIO = {
   nombre:'', fecha_nacimiento:'', telefono:'', email:'',
-  whatsapp:'', obra_social:'', nro_afiliado:'', domicilio:'',
+  whatsapp:'', obra_social:'', nro_afiliado:'', dni:'', domicilio:'',
   localidad:'', ocupacion:'', preferencia_notif:'whatsapp',
   antecedentes:{}, observaciones:''
 }
+
+const getUrl = (path) => `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/fichas/${path}`
 
 function FormPaciente({ titulo, inicial, onGuardar, onVolver }) {
   const [form, setForm] = useState(inicial || FORM_VACIO)
@@ -40,29 +42,19 @@ function FormPaciente({ titulo, inicial, onGuardar, onVolver }) {
     handleArchivos(e.dataTransfer.files)
   }
 
-  function quitarArchivo(idx) {
-    setArchivos(prev => prev.filter((_,i) => i !== idx))
-  }
-
-  function quitarExistente(idx) {
-    setArchivosExistentes(prev => prev.filter((_,i) => i !== idx))
-  }
+  function quitarArchivo(idx) { setArchivos(prev => prev.filter((_,i) => i !== idx)) }
+  function quitarExistente(idx) { setArchivosExistentes(prev => prev.filter((_,i) => i !== idx)) }
 
   async function handleGuardar() {
     if (!form.nombre.trim()) { alert('El nombre es obligatorio'); return }
     setGuardando(true)
-
-    // Subir archivos nuevos a Supabase Storage
-    const archivosSubidos = [...archivosExistentes]
+    const archivosSubidos = []
     for (const a of archivos) {
       const ext = a.name.split('.').pop()
       const path = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
       const { error } = await supabase.storage.from('fichas').upload(path, a.file)
-      if (!error) {
-        archivosSubidos.push({ name: a.name, path, tipo: a.tipo })
-      }
+      if (!error) archivosSubidos.push({ name: a.name, path, tipo: a.tipo })
     }
-
     await onGuardar(form, archivosSubidos)
     setGuardando(false)
   }
@@ -86,11 +78,11 @@ function FormPaciente({ titulo, inicial, onGuardar, onVolver }) {
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px', marginBottom:'16px' }}>
           {campo('Apellido y nombre *', 'nombre', 'text', 'González, María')}
           {campo('Fecha de nacimiento', 'fecha_nacimiento', 'date')}
+          {campo('DNI', 'dni', 'text', '12.345.678')}
           {campo('Teléfono', 'telefono', 'tel', '3442-555555')}
           {campo('Email', 'email', 'email', 'paciente@email.com')}
           {campo('WhatsApp', 'whatsapp', 'tel', '3442-555555')}
           {campo('Obra social', 'obra_social', 'text', 'OSDE / IOMA / Particular')}
-          {campo('DNI', 'dni', 'text', '12.345.678')}
           {campo('N° de afiliado', 'nro_afiliado')}
           {campo('Ocupación', 'ocupacion')}
           {campo('Domicilio', 'domicilio', 'text', 'Av. Colón 1234')}
@@ -134,24 +126,21 @@ function FormPaciente({ titulo, inicial, onGuardar, onVolver }) {
             fontSize:'13px', resize:'vertical', fontFamily:'inherit' }} />
       </div>
 
-      {/* SECCIÓN ARCHIVOS */}
+      {/* ARCHIVOS */}
       <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee', marginBottom:'12px' }}>
         <p style={{ fontSize:'12px', fontWeight:'600', color:'#888', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:'8px' }}>
           📎 Fichas y archivos del paciente
         </p>
         <p style={{ fontSize:'11px', color:'#999', marginBottom:'12px' }}>
-          Subí fotos de fichas manuales, radiografías, estudios o cualquier documento del paciente.
+          Subí fotos de fichas manuales, radiografías, estudios o cualquier documento.
         </p>
-
-        {/* ZONA DE DROP */}
         <div
           onClick={() => fileRef.current.click()}
           onDragOver={e => { e.preventDefault(); e.currentTarget.style.background='#E6F1FB' }}
           onDragLeave={e => e.currentTarget.style.background='#f8f8f6'}
           onDrop={e => { e.currentTarget.style.background='#f8f8f6'; handleDrop(e) }}
           style={{ border:'2px dashed #ccc', borderRadius:'10px', padding:'24px',
-            textAlign:'center', cursor:'pointer', background:'#f8f8f6',
-            transition:'background .15s', marginBottom:'12px' }}>
+            textAlign:'center', cursor:'pointer', background:'#f8f8f6', transition:'background .15s', marginBottom:'12px' }}>
           <input ref={fileRef} type='file' multiple accept='image/*,.pdf'
             style={{ display:'none' }} onChange={e => handleArchivos(e.target.files)} />
           <p style={{ fontSize:'24px', margin:'0 0 6px' }}>📁</p>
@@ -161,24 +150,21 @@ function FormPaciente({ titulo, inicial, onGuardar, onVolver }) {
           <p style={{ fontSize:'11px', color:'#aaa', margin:0 }}>JPG, PNG, PDF · Sin límite de cantidad</p>
         </div>
 
-        {/* ARCHIVOS EXISTENTES */}
         {archivosExistentes.length > 0 && (
-          <div style={{ marginBottom:'8px' }}>
+          <div style={{ marginBottom:'10px' }}>
             <p style={{ fontSize:'11px', color:'#888', marginBottom:'6px' }}>Archivos guardados:</p>
             <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
               {archivosExistentes.map((a, i) => (
                 <div key={i} style={{ position:'relative', width:'80px' }}>
                   {a.tipo?.startsWith('image/') ? (
-                    <img src={supabase.storage.from('fichas').getPublicUrl(a.path).data.publicUrl}
-                      alt={a.name}
-                      style={{ width:'80px', height:'80px', objectFit:'cover',
-                        borderRadius:'8px', border:'1px solid #ddd', cursor:'pointer' }}
-                      onClick={() => window.open(supabase.storage.from('fichas').getPublicUrl(a.path).data.publicUrl)} />
+                    <img src={getUrl(a.path)} alt={a.name}
+                      style={{ width:'80px', height:'80px', objectFit:'cover', borderRadius:'8px', border:'1px solid #ddd', cursor:'pointer' }}
+                      onClick={() => window.open(getUrl(a.path))} />
                   ) : (
                     <div style={{ width:'80px', height:'80px', borderRadius:'8px', border:'1px solid #ddd',
                       background:'#f5f5f5', display:'flex', flexDirection:'column',
                       alignItems:'center', justifyContent:'center', gap:'4px', cursor:'pointer' }}
-                      onClick={() => window.open(supabase.storage.from('fichas').getPublicUrl(a.path).data.publicUrl)}>
+                      onClick={() => window.open(getUrl(a.path))}>
                       <span style={{ fontSize:'22px' }}>📄</span>
                       <span style={{ fontSize:'9px', color:'#888', textAlign:'center',
                         overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', width:'70px', padding:'0 4px' }}>
@@ -189,9 +175,7 @@ function FormPaciente({ titulo, inicial, onGuardar, onVolver }) {
                   <button onClick={() => quitarExistente(i)}
                     style={{ position:'absolute', top:'-6px', right:'-6px', width:'18px', height:'18px',
                       borderRadius:'50%', background:'#E24B4A', color:'#fff', border:'none',
-                      cursor:'pointer', fontSize:'11px', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                    ×
-                  </button>
+                      cursor:'pointer', fontSize:'11px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
                   <p style={{ fontSize:'9px', color:'#888', margin:'3px 0 0', textAlign:'center',
                     overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.name}</p>
                 </div>
@@ -200,7 +184,6 @@ function FormPaciente({ titulo, inicial, onGuardar, onVolver }) {
           </div>
         )}
 
-        {/* ARCHIVOS NUEVOS */}
         {archivos.length > 0 && (
           <div>
             <p style={{ fontSize:'11px', color:'#888', marginBottom:'6px' }}>Archivos a subir:</p>
@@ -209,8 +192,7 @@ function FormPaciente({ titulo, inicial, onGuardar, onVolver }) {
                 <div key={i} style={{ position:'relative', width:'80px' }}>
                   {a.preview ? (
                     <img src={a.preview} alt={a.name}
-                      style={{ width:'80px', height:'80px', objectFit:'cover',
-                        borderRadius:'8px', border:'1px solid #ddd' }} />
+                      style={{ width:'80px', height:'80px', objectFit:'cover', borderRadius:'8px', border:'1px solid #ddd' }} />
                   ) : (
                     <div style={{ width:'80px', height:'80px', borderRadius:'8px', border:'1px solid #ddd',
                       background:'#f5f5f5', display:'flex', flexDirection:'column',
@@ -225,9 +207,7 @@ function FormPaciente({ titulo, inicial, onGuardar, onVolver }) {
                   <button onClick={() => quitarArchivo(i)}
                     style={{ position:'absolute', top:'-6px', right:'-6px', width:'18px', height:'18px',
                       borderRadius:'50%', background:'#E24B4A', color:'#fff', border:'none',
-                      cursor:'pointer', fontSize:'11px', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                    ×
-                  </button>
+                      cursor:'pointer', fontSize:'11px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
                   <p style={{ fontSize:'9px', color:'#888', margin:'3px 0 0', textAlign:'center' }}>{fmtSize(a.size)}</p>
                 </div>
               ))}
@@ -248,8 +228,7 @@ function FormPaciente({ titulo, inicial, onGuardar, onVolver }) {
 
 export default function Pacientes() {
   const [pacientes, setPacientes] = useState([])
-  const [busqueda, setBusqueda] = useState([])
-  const [busqueda2, setBusqueda2] = useState('')
+  const [busqueda, setBusqueda] = useState('')
   const [loading, setLoading] = useState(true)
   const [vista, setVista] = useState('lista')
   const [pacienteSeleccionado, setPacienteSeleccionado] = useState(null)
@@ -264,26 +243,56 @@ export default function Pacientes() {
   }
 
   async function guardarNuevo(form, archivos) {
-    const datos = { ...form }
-    if (archivos.length > 0) datos._archivos = archivos
-    const { error } = await supabase.from('pacientes').insert([{ ...form, observaciones: form.observaciones || null }])
+    const { data, error } = await supabase.from('pacientes').insert([{
+      nombre: form.nombre,
+      fecha_nacimiento: form.fecha_nacimiento || null,
+      telefono: form.telefono || null,
+      email: form.email || null,
+      whatsapp: form.whatsapp || null,
+      obra_social: form.obra_social || null,
+      nro_afiliado: form.nro_afiliado || null,
+      dni: form.dni || null,
+      domicilio: form.domicilio || null,
+      localidad: form.localidad || null,
+      ocupacion: form.ocupacion || null,
+      preferencia_notif: form.preferencia_notif,
+      antecedentes: form.antecedentes || {},
+      observaciones: form.observaciones || null,
+    }]).select()
     if (error) { alert('Error: ' + error.message); return }
-    // Guardar referencia de archivos en el paciente
+    const pacId = data[0].id
     if (archivos.length > 0) {
-      const { data } = await supabase.from('pacientes').select('id').order('created_at', { ascending: false }).limit(1)
-      if (data?.[0]) {
-        await supabase.from('pacientes').update({ observaciones: form.observaciones || null }).eq('id', data[0].id)
-      }
+      await supabase.from('paciente_archivos').insert(
+        archivos.map(a => ({ paciente_id: pacId, name: a.name, path: a.path, tipo: a.tipo }))
+      )
     }
     await cargarPacientes()
     setVista('lista')
   }
 
   async function guardarEdicion(form, archivos) {
-    const update = { ...form }
-    if (archivos.length > 0) update.antecedentes = { ...form.antecedentes, _archivos: archivos }
-    const { error } = await supabase.from('pacientes').update(update).eq('id', pacienteSeleccionado.id)
+    const { error } = await supabase.from('pacientes').update({
+      nombre: form.nombre,
+      fecha_nacimiento: form.fecha_nacimiento || null,
+      telefono: form.telefono || null,
+      email: form.email || null,
+      whatsapp: form.whatsapp || null,
+      obra_social: form.obra_social || null,
+      nro_afiliado: form.nro_afiliado || null,
+      dni: form.dni || null,
+      domicilio: form.domicilio || null,
+      localidad: form.localidad || null,
+      ocupacion: form.ocupacion || null,
+      preferencia_notif: form.preferencia_notif,
+      antecedentes: form.antecedentes || {},
+      observaciones: form.observaciones || null,
+    }).eq('id', pacienteSeleccionado.id)
     if (error) { alert('Error: ' + error.message); return }
+    if (archivos.length > 0) {
+      await supabase.from('paciente_archivos').insert(
+        archivos.map(a => ({ paciente_id: pacienteSeleccionado.id, name: a.name, path: a.path, tipo: a.tipo }))
+      )
+    }
     await cargarPacientes()
     setVista('lista')
     setPacienteSeleccionado(null)
@@ -301,24 +310,23 @@ export default function Pacientes() {
     setVista('editar')
   }
 
-  function abrirFicha(p) {
-    setPacienteSeleccionado(p)
+  async function abrirFicha(p) {
+    const { data } = await supabase.from('paciente_archivos')
+      .select('*').eq('paciente_id', p.id).order('created_at')
+    setPacienteSeleccionado({ ...p, _archivos: data || [] })
     setVista('ficha')
   }
 
   const pacientesFiltrados = pacientes.filter(p =>
-    p.nombre.toLowerCase().includes(busqueda2.toLowerCase()) ||
-    (p.obra_social || '').toLowerCase().includes(busqueda2.toLowerCase()) ||
-    (p.telefono || '').includes(busqueda2)
+    p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+    (p.obra_social || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+    (p.telefono || '').includes(busqueda) ||
+    (p.dni || '').includes(busqueda)
   )
 
   if (vista === 'nuevo') return (
-    <FormPaciente
-      titulo='Nuevo paciente'
-      inicial={FORM_VACIO}
-      onGuardar={guardarNuevo}
-      onVolver={() => setVista('lista')}
-    />
+    <FormPaciente titulo='Nuevo paciente' inicial={FORM_VACIO}
+      onGuardar={guardarNuevo} onVolver={() => setVista('lista')} />
   )
 
   if (vista === 'editar' && pacienteSeleccionado) return (
@@ -332,13 +340,14 @@ export default function Pacientes() {
         whatsapp: pacienteSeleccionado.whatsapp || '',
         obra_social: pacienteSeleccionado.obra_social || '',
         nro_afiliado: pacienteSeleccionado.nro_afiliado || '',
+        dni: pacienteSeleccionado.dni || '',
         domicilio: pacienteSeleccionado.domicilio || '',
         localidad: pacienteSeleccionado.localidad || '',
         ocupacion: pacienteSeleccionado.ocupacion || '',
         preferencia_notif: pacienteSeleccionado.preferencia_notif || 'whatsapp',
         antecedentes: pacienteSeleccionado.antecedentes || {},
         observaciones: pacienteSeleccionado.observaciones || '',
-        _archivos: pacienteSeleccionado.antecedentes?._archivos || [],
+        _archivos: pacienteSeleccionado._archivos || [],
       }}
       onGuardar={guardarEdicion}
       onVolver={() => { setVista('lista'); setPacienteSeleccionado(null) }}
@@ -346,7 +355,7 @@ export default function Pacientes() {
   )
 
   if (vista === 'ficha' && pacienteSeleccionado) {
-    const archivos = pacienteSeleccionado.antecedentes?._archivos || []
+    const archivos = pacienteSeleccionado._archivos || []
     return (
       <div style={{ padding:'24px', maxWidth:'700px' }}>
         <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'20px' }}>
@@ -368,12 +377,12 @@ export default function Pacientes() {
           </p>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
             {[
+              ['DNI', pacienteSeleccionado.dni],
               ['Fecha de nacimiento', pacienteSeleccionado.fecha_nacimiento?.split('-').reverse().join('/')],
               ['Teléfono', pacienteSeleccionado.telefono],
               ['Email', pacienteSeleccionado.email],
               ['WhatsApp', pacienteSeleccionado.whatsapp],
               ['Obra social', pacienteSeleccionado.obra_social],
-              ['DNI', pacienteSeleccionado.dni],
               ['N° afiliado', pacienteSeleccionado.nro_afiliado],
               ['Domicilio', pacienteSeleccionado.domicilio],
               ['Localidad', pacienteSeleccionado.localidad],
@@ -388,15 +397,14 @@ export default function Pacientes() {
           </div>
         </div>
 
-        {Object.entries(pacienteSeleccionado.antecedentes || {})
-          .filter(([k,v]) => k !== '_archivos' && v).length > 0 && (
+        {Object.entries(pacienteSeleccionado.antecedentes || {}).filter(([,v]) => v).length > 0 && (
           <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee', marginBottom:'12px' }}>
             <p style={{ fontSize:'12px', fontWeight:'600', color:'#888', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:'10px' }}>
               Antecedentes médicos
             </p>
             <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
               {Object.entries(pacienteSeleccionado.antecedentes || {})
-                .filter(([k,v]) => k !== '_archivos' && v)
+                .filter(([,v]) => v)
                 .map(([k]) => (
                   <span key={k} style={{ padding:'3px 10px', background:'#FAEEDA', color:'#633806',
                     borderRadius:'20px', fontSize:'12px' }}>{k}</span>
@@ -414,7 +422,6 @@ export default function Pacientes() {
           </div>
         )}
 
-        {/* ARCHIVOS */}
         <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee' }}>
           <p style={{ fontSize:'12px', fontWeight:'600', color:'#888', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:'12px' }}>
             📎 Fichas y archivos
@@ -424,13 +431,12 @@ export default function Pacientes() {
           ) : (
             <div style={{ display:'flex', flexWrap:'wrap', gap:'10px' }}>
               {archivos.map((a, i) => {
-                const url = supabase.storage.from('fichas').getPublicUrl(a.path).data.publicUrl
+                const url = getUrl(a.path)
                 return (
                   <div key={i} style={{ width:'90px', cursor:'pointer' }} onClick={() => window.open(url)}>
                     {a.tipo?.startsWith('image/') ? (
                       <img src={url} alt={a.name}
-                        style={{ width:'90px', height:'90px', objectFit:'cover',
-                          borderRadius:'8px', border:'1px solid #ddd' }} />
+                        style={{ width:'90px', height:'90px', objectFit:'cover', borderRadius:'8px', border:'1px solid #ddd' }} />
                     ) : (
                       <div style={{ width:'90px', height:'90px', borderRadius:'8px', border:'1px solid #ddd',
                         background:'#f5f5f5', display:'flex', flexDirection:'column',
@@ -467,8 +473,8 @@ export default function Pacientes() {
         </button>
       </div>
 
-      <input placeholder='Buscar por nombre, obra social o teléfono...'
-        value={busqueda2} onChange={e => setBusqueda2(e.target.value)}
+      <input placeholder='Buscar por nombre, DNI, obra social o teléfono...'
+        value={busqueda} onChange={e => setBusqueda(e.target.value)}
         style={{ width:'100%', padding:'10px 14px', border:'1px solid #ddd', borderRadius:'10px',
           fontSize:'13px', marginBottom:'20px', background:'#fff' }} />
 
@@ -494,7 +500,7 @@ export default function Pacientes() {
                   <p style={{ fontWeight:'500', fontSize:'14px', margin:0, color:'#111' }}>{p.nombre}</p>
                   <p style={{ fontSize:'12px', color:'#888', margin:'2px 0 0' }}>
                     {p.obra_social || 'Sin obra social'} {p.telefono ? '· ' + p.telefono : ''}
-                    {p.fecha_nacimiento ? ' · ' + p.fecha_nacimiento.split('-').reverse().join('/') : ''}
+                    {p.dni ? ' · DNI ' + p.dni : ''}
                   </p>
                 </div>
                 <div style={{ display:'flex', gap:'6px' }}>
