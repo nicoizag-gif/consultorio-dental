@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
+import { supabase } from './lib/supabase'
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import Pacientes from './pages/Pacientes'
 import Agenda from './pages/Agenda'
 import CuentaCorriente from './pages/CuentaCorriente'
 import Reportes from './pages/Reportes'
+import Configuracion from './pages/Configuracion'
 import './App.css'
 
 const NAV_ITEMS = [
@@ -13,10 +15,22 @@ const NAV_ITEMS = [
   { to:'/agenda', label:'📅 Agenda' },
   { to:'/cuenta-corriente', label:'💰 Cuenta corriente' },
   { to:'/reportes', label:'📋 Obras sociales' },
+  { to:'/configuracion', label:'⚙️ Configuración' },
 ]
 
 function App() {
   const [menuAbierto, setMenuAbierto] = useState(false)
+const [nombreProfesional, setNombreProfesional] = useState('')
+
+useEffect(() => {
+  supabase.from('configuracion').select('nombre, apellido').limit(1)
+    .then(({ data }) => {
+      if (data?.[0]) {
+        const { nombre, apellido } = data[0]
+        if (nombre || apellido) setNombreProfesional(`${nombre || ''} ${apellido || ''}`.trim())
+      }
+    })
+}, [])
   const [esCelular, setEsCelular] = useState(window.innerWidth < 768)
 
   useEffect(() => {
@@ -52,9 +66,9 @@ function App() {
           display: 'flex', flexDirection: 'column'
         }}>
           <div style={{ padding:'20px 20px 16px', borderBottom:'1px solid #333' }}>
-            <p style={{ color:'#fff', fontWeight:'600', fontSize:'15px', margin:0 }}>🦷 Consultorio</p>
-            <p style={{ color:'#888', fontSize:'11px', margin:'4px 0 0' }}>Sistema odontológico</p>
-          </div>
+  <p style={{ color:'#fff', fontWeight:'600', fontSize:'15px', margin:0 }}>🦷 Consultorio</p>
+  <p style={{ color:'#aaa', fontSize:'11px', margin:'4px 0 0' }}>{nombreProfesional || 'Sistema odontológico'}</p>
+</div>
           <div style={{ padding:'16px 12px', display:'flex', flexDirection:'column', gap:'4px', flex:1, overflowY:'auto' }}>
             {NAV_ITEMS.map(({ to, label, end }) => (
               <NavLink key={to} to={to} end={end}
@@ -94,6 +108,7 @@ function App() {
               <Route path="/agenda" element={<Agenda />} />
               <Route path="/cuenta-corriente" element={<CuentaCorriente />} />
               <Route path="/reportes" element={<Reportes />} />
+              <Route path="/configuracion" element={<Configuracion />} />
             </Routes>
           </main>
 

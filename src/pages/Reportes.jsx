@@ -11,30 +11,32 @@ export default function Reportes() {
   const [mes, setMes] = useState(new Date().getMonth())
   const [anio, setAnio] = useState(new Date().getFullYear())
   const [filtroOS, setFiltroOS] = useState('')
-  const [profesional, setProfesional] = useState('Dr./Dra. — Odontología')
+  const [config, setConfig] = useState(null)
+const [profesional, setProfesional] = useState('Dr./Dra. — Odontología')
 
   useEffect(() => { cargarDatos() }, [mes, anio])
 
   async function cargarDatos() {
-    setLoading(true)
+  setLoading(true)
   const mesStr = String(mes+1).padStart(2,'0')
   const desde = `${anio}-${mesStr}-01`
-  // Último día real del mes
   const ultimoDia = new Date(anio, mes+1, 0).getDate()
   const hasta = `${anio}-${mesStr}-${String(ultimoDia).padStart(2,'0')}`
-    const [{ data: m }, { data: p }] = await Promise.all([
-      supabase.from('cuenta_corriente')
-        .select('*, pacientes(nombre, obra_social, nro_afiliado, email, telefono)')
-        .eq('tipo', 'debe')
-        .gte('fecha', desde)
-        .lte('fecha', hasta)
-        .order('fecha'),
-      supabase.from('pacientes').select('id, nombre, obra_social').order('nombre')
-    ])
-    setMovimientos(m || [])
-    setPacientes(p || [])
-    setLoading(false)
-  }
+  const [{ data: m }, { data: p }, { data: config }] = await Promise.all([
+    supabase.from('cuenta_corriente')
+      .select('*, pacientes(nombre, obra_social, nro_afiliado, email, telefono)')
+      .eq('tipo', 'debe')
+      .gte('fecha', desde)
+      .lte('fecha', hasta)
+      .order('fecha'),
+    supabase.from('pacientes').select('id, nombre, obra_social').order('nombre'),
+    supabase.from('configuracion').select('*').limit(1)
+  ])
+  setMovimientos(m || [])
+  setPacientes(p || [])
+  if (config?.[0]) setConfig(config[0])
+  setLoading(false)
+}
 
   const fmt = n => '$' + Math.round(n).toLocaleString('es-AR')
 
@@ -84,8 +86,17 @@ export default function Reportes() {
       <div class="header">
         <div>
           <h1>Reporte de prestaciones — ${MESES[mes]} ${anio}</h1>
-          <p style="margin:2px 0;color:#555">${profesional}</p>
-          <p style="margin:2px 0;color:#555">Obra social: ${filtroOS || 'Todas'}</p>
+<p style="margin:2px 0;color:#111;font-weight:bold">
+  ${config ? `${config.nombre} ${config.apellido} — ${config.especialidad || ''}` : profesional}
+</p>
+<p style="margin:2px 0;color:#555">
+  ${config?.matricula ? 'Mat. ' + config.matricula : ''}
+  ${config?.telefono ? ' · ' + config.telefono : ''}
+</p>
+<p style="margin:2px 0;color:#555">
+  ${config?.direccion || ''}${config?.localidad ? ', ' + config.localidad : ''}
+</p>
+<p style="margin:2px 0;color:#555">Obra social: ${filtroOS || 'Todas'}</p>
         </div>
         <div style="text-align:right;color:#888;font-size:10px">
           <p>Fecha de emisión: ${new Date().toLocaleDateString('es-AR')}</p>
