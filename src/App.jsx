@@ -7,12 +7,14 @@ import Agenda from './pages/Agenda'
 import CuentaCorriente from './pages/CuentaCorriente'
 import Reportes from './pages/Reportes'
 import Configuracion from './pages/Configuracion'
+import HistorialClinico from './pages/HistorialClinico'
 import './App.css'
 
 const NAV_ITEMS = [
   { to:'/', label:'📊 Panel principal', end:true },
   { to:'/pacientes', label:'👤 Pacientes' },
   { to:'/agenda', label:'📅 Agenda' },
+  { to:'/historial', label:'📋 Historial clínico' },
   { to:'/cuenta-corriente', label:'💰 Cuenta corriente' },
   { to:'/reportes', label:'📋 Obras sociales' },
   { to:'/configuracion', label:'⚙️ Configuración' },
@@ -108,6 +110,7 @@ useEffect(() => {
               <Route path="/agenda" element={<Agenda />} />
               <Route path="/cuenta-corriente" element={<CuentaCorriente />} />
               <Route path="/reportes" element={<Reportes />} />
+              <Route path="/historial" element={<HistorialClinico />} />
               <Route path="/configuracion" element={<Configuracion />} />
             </Routes>
           </main>
