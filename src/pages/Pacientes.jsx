@@ -13,34 +13,205 @@ const FORM_VACIO = {
 
 const getUrl = (path) => `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/fichas/${path}`
 
+function HistorialPaciente({ pacienteId }) {
+  const [historial, setHistorial] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState({
+    fecha: new Date().toISOString().split('T')[0],
+    descripcion: '', tratamiento_realizado: '', medicacion: '', proximo_paso: ''
+  })
+  const [editId, setEditId] = useState(null)
+  const [guardando, setGuardando] = useState(false)
+
+  useEffect(() => { cargar() }, [pacienteId])
+
+  async function cargar() {
+    setLoading(true)
+    const { data } = await supabase.from('historial_clinico')
+      .select('*').eq('paciente_id', pacienteId)
+      .order('fecha', { ascending: false })
+      .order('created_at', { ascending: false })
+    setHistorial(data || [])
+    setLoading(false)
+  }
+
+  async function guardar() {
+    if (!form.descripcion.trim()) { alert('La descripción es obligatoria'); return }
+    setGuardando(true)
+    if (editId) {
+      await supabase.from('historial_clinico').update({
+        fecha: form.fecha, descripcion: form.descripcion,
+        tratamiento_realizado: form.tratamiento_realizado || null,
+        medicacion: form.medicacion || null,
+        proximo_paso: form.proximo_paso || null,
+      }).eq('id', editId)
+    } else {
+      await supabase.from('historial_clinico').insert([{
+        paciente_id: pacienteId, fecha: form.fecha,
+        descripcion: form.descripcion,
+        tratamiento_realizado: form.tratamiento_realizado || null,
+        medicacion: form.medicacion || null,
+        proximo_paso: form.proximo_paso || null,
+      }])
+    }
+    await cargar()
+    setShowForm(false)
+    setEditId(null)
+    setForm({ fecha: new Date().toISOString().split('T')[0], descripcion:'', tratamiento_realizado:'', medicacion:'', proximo_paso:'' })
+    setGuardando(false)
+  }
+
+  async function eliminar(id) {
+    if (!confirm('¿Eliminar este registro?')) return
+    await supabase.from('historial_clinico').delete().eq('id', id)
+    await cargar()
+  }
+
+  function abrirEdicion(h) {
+    setForm({
+      fecha: h.fecha, descripcion: h.descripcion || '',
+      tratamiento_realizado: h.tratamiento_realizado || '',
+      medicacion: h.medicacion || '', proximo_paso: h.proximo_paso || ''
+    })
+    setEditId(h.id)
+    setShowForm(true)
+  }
+
+  const inp = (label, key, multi=false, placeholder='') => (
+    <div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>
+      <label style={{ fontSize:'11px', color:'#666' }}>{label}</label>
+      {multi ? (
+        <textarea value={form[key]} rows={2} placeholder={placeholder}
+          onChange={e => setForm(f => ({...f, [key]: e.target.value}))}
+          style={{ padding:'6px 9px', border:'1px solid #ddd', borderRadius:'7px',
+            fontSize:'13px', resize:'vertical', fontFamily:'inherit' }} />
+      ) : (
+        <input type='text' value={form[key]} placeholder={placeholder}
+          onChange={e => setForm(f => ({...f, [key]: e.target.value}))}
+          style={{ padding:'6px 9px', border:'1px solid #ddd', borderRadius:'7px', fontSize:'13px' }} />
+      )}
+    </div>
+  )
+
+  return (
+    <div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' }}>
+        <p style={{ fontSize:'13px', fontWeight:'600', color:'#111', margin:0 }}>
+          Historial clínico <span style={{ fontSize:'11px', fontWeight:'400', color:'#888' }}>({historial.length} registros)</span>
+        </p>
+        <button onClick={() => { setShowForm(true); setEditId(null); setForm({ fecha: new Date().toISOString().split('T')[0], descripcion:'', tratamiento_realizado:'', medicacion:'', proximo_paso:'' }) }}
+          style={{ padding:'7px 14px', background:'#378ADD', color:'#fff', border:'none',
+            borderRadius:'8px', fontSize:'12px', cursor:'pointer', fontWeight:'500' }}>
+          + Nueva entrada
+        </button>
+      </div>
+
+      {showForm && (
+        <div style={{ background:'#f8f8f6', borderRadius:'12px', padding:'16px',
+          marginBottom:'14px', border:'1px solid #eee' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' }}>
+            <p style={{ fontWeight:'600', fontSize:'13px', margin:0 }}>
+              {editId ? 'Editar registro' : 'Nueva entrada clínica'}
+            </p>
+            <button onClick={() => { setShowForm(false); setEditId(null) }}
+              style={{ border:'none', background:'none', cursor:'pointer', fontSize:'18px', color:'#888' }}>×</button>
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>
+              <label style={{ fontSize:'11px', color:'#666' }}>Fecha</label>
+              <input type='date' value={form.fecha}
+                onChange={e => setForm(f => ({...f, fecha: e.target.value}))}
+                style={{ padding:'6px 9px', border:'1px solid #ddd', borderRadius:'7px', fontSize:'13px', maxWidth:'180px' }} />
+            </div>
+            {inp('Descripción / Evolución *', 'descripcion', true, 'Estado del paciente, hallazgos clínicos...')}
+            {inp('Tratamiento realizado', 'tratamiento_realizado', true, 'Procedimientos realizados en esta sesión...')}
+            {inp('Medicación indicada', 'medicacion', false, 'Ej: Ibuprofeno 400mg cada 8hs')}
+            {inp('Próximo paso', 'proximo_paso', false, 'Ej: Control en 7 días...')}
+          </div>
+          <button onClick={guardar} disabled={guardando}
+            style={{ width:'100%', marginTop:'12px', padding:'9px', background: guardando ? '#aaa' : '#378ADD',
+              color:'#fff', border:'none', borderRadius:'8px', fontSize:'13px',
+              fontWeight:'500', cursor: guardando ? 'not-allowed' : 'pointer' }}>
+            {guardando ? 'Guardando...' : editId ? 'Guardar cambios' : 'Registrar entrada'}
+          </button>
+        </div>
+      )}
+
+      {loading ? <p style={{ color:'#888', fontSize:'13px' }}>Cargando...</p> :
+        historial.length === 0 ? (
+          <div style={{ textAlign:'center', padding:'30px', color:'#888' }}>
+            <p style={{ fontSize:'24px', margin:'0 0 6px' }}>📋</p>
+            <p style={{ fontSize:'13px', margin:0 }}>Sin registros. Agregá la primera entrada.</p>
+          </div>
+        ) : historial.map((h, idx) => (
+          <div key={h.id} style={{ background: idx === 0 ? '#EBF4FF' : '#fff',
+            border: idx === 0 ? '1px solid #B5D4F4' : '1px solid #eee',
+            borderRadius:'10px', overflow:'hidden', marginBottom:'8px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
+              padding:'10px 14px', borderBottom:'1px solid #eee' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                <div style={{ width:'7px', height:'7px', borderRadius:'50%',
+                  background: idx === 0 ? '#378ADD' : '#ccc' }} />
+                <p style={{ fontWeight:'600', fontSize:'13px', margin:0,
+                  color: idx === 0 ? '#378ADD' : '#333' }}>
+                  {h.fecha?.split('-').reverse().join('/')}
+                  {idx === 0 && <span style={{ fontSize:'10px', marginLeft:'8px',
+                    background:'#378ADD', color:'#fff', padding:'1px 7px',
+                    borderRadius:'20px' }}>Última</span>}
+                </p>
+              </div>
+              <div style={{ display:'flex', gap:'5px' }}>
+                <button onClick={() => abrirEdicion(h)}
+                  style={{ padding:'3px 9px', background:'#E6F1FB', border:'none',
+                    borderRadius:'5px', color:'#185FA5', fontSize:'11px', cursor:'pointer' }}>✏️</button>
+                <button onClick={() => eliminar(h.id)}
+                  style={{ padding:'3px 8px', background:'#FCEBEB', border:'none',
+                    borderRadius:'5px', color:'#E24B4A', fontSize:'11px', cursor:'pointer' }}>🗑</button>
+              </div>
+            </div>
+            <div style={{ padding:'12px 14px', display:'flex', flexDirection:'column', gap:'8px' }}>
+              <div>
+                <p style={{ fontSize:'10px', color:'#888', margin:'0 0 2px', fontWeight:'600',
+                  textTransform:'uppercase', letterSpacing:'.04em' }}>Evolución</p>
+                <p style={{ fontSize:'13px', color:'#111', margin:0 }}>{h.descripcion}</p>
+              </div>
+              {h.tratamiento_realizado && (
+                <div>
+                  <p style={{ fontSize:'10px', color:'#888', margin:'0 0 2px', fontWeight:'600',
+                    textTransform:'uppercase', letterSpacing:'.04em' }}>Tratamiento realizado</p>
+                  <p style={{ fontSize:'13px', color:'#333', margin:0 }}>{h.tratamiento_realizado}</p>
+                </div>
+              )}
+              <div style={{ display:'flex', gap:'10px', flexWrap:'wrap' }}>
+                {h.medicacion && (
+                  <div style={{ background:'#FAEEDA', borderRadius:'8px', padding:'7px 10px', flex:1, minWidth:'150px' }}>
+                    <p style={{ fontSize:'10px', color:'#633806', margin:'0 0 2px', fontWeight:'600' }}>💊 MEDICACIÓN</p>
+                    <p style={{ fontSize:'12px', color:'#633806', margin:0 }}>{h.medicacion}</p>
+                  </div>
+                )}
+                {h.proximo_paso && (
+                  <div style={{ background:'#E1F5EE', borderRadius:'8px', padding:'7px 10px', flex:1, minWidth:'150px' }}>
+                    <p style={{ fontSize:'10px', color:'#085041', margin:'0 0 2px', fontWeight:'600' }}>→ PRÓXIMO PASO</p>
+                    <p style={{ fontSize:'12px', color:'#085041', margin:0 }}>{h.proximo_paso}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ))
+      }
+    </div>
+  )
+}
+
 function FormPaciente({ titulo, inicial, onGuardar, onVolver }) {
   const [form, setForm] = useState(inicial || FORM_VACIO)
   const [guardando, setGuardando] = useState(false)
   const [archivos, setArchivos] = useState([])
   const [archivosExistentes, setArchivosExistentes] = useState(inicial?._archivos || [])
   const fileRef = useRef()
-  const [tabFicha, setTabFicha] = useState('datos')
-  const [odontogramaActual, setOdontogramaActual] = useState({})
-  const [odontogramaTratado, setOdontogramaTratado] = useState({})
-  const [guardandoOdonto, setGuardandoOdonto] = useState(false)
-async function abrirFicha(p) {
-  const { data } = await supabase.from('paciente_archivos')
-    .select('*').eq('paciente_id', p.id).order('created_at')
-  setPacienteSeleccionado({ ...p, _archivos: data || [] })
-  setOdontogramaActual(p.odontograma?.actual || {})
-  setOdontogramaTratado(p.odontograma?.tratado || {})
-  setTabFicha('datos')
-  setVista('ficha')
-}
-async function abrirFicha(p) {
-  const { data } = await supabase.from('paciente_archivos')
-    .select('*').eq('paciente_id', p.id).order('created_at')
-  setPacienteSeleccionado({ ...p, _archivos: data || [] })
-  setOdontogramaActual(p.odontograma?.actual || {})
-  setOdontogramaTratado(p.odontograma?.tratado || {})
-  setTabFicha('datos')
-  setVista('ficha')
-}
+
   const campo = (label, key, type='text', placeholder='') => (
     <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
       <label style={{ fontSize:'11px', color:'#666' }}>{label}</label>
@@ -148,7 +319,6 @@ async function abrirFicha(p) {
             fontSize:'13px', resize:'vertical', fontFamily:'inherit' }} />
       </div>
 
-      {/* ARCHIVOS */}
       <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee', marginBottom:'12px' }}>
         <p style={{ fontSize:'12px', fontWeight:'600', color:'#888', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:'8px' }}>
           📎 Fichas y archivos del paciente
@@ -156,8 +326,7 @@ async function abrirFicha(p) {
         <p style={{ fontSize:'11px', color:'#999', marginBottom:'12px' }}>
           Subí fotos de fichas manuales, radiografías, estudios o cualquier documento.
         </p>
-        <div
-          onClick={() => fileRef.current.click()}
+        <div onClick={() => fileRef.current.click()}
           onDragOver={e => { e.preventDefault(); e.currentTarget.style.background='#E6F1FB' }}
           onDragLeave={e => e.currentTarget.style.background='#f8f8f6'}
           onDrop={e => { e.currentTarget.style.background='#f8f8f6'; handleDrop(e) }}
@@ -323,22 +492,22 @@ export default function Pacientes() {
     setVista('lista')
     setPacienteSeleccionado(null)
   }
+
   async function guardarOdontograma() {
-  setGuardandoOdonto(true)
-  const { error } = await supabase.from('pacientes').update({
-    odontograma: { actual: odontogramaActual, tratado: odontogramaTratado }
-  }).eq('id', pacienteSeleccionado.id)
-  setGuardandoOdonto(false)
-  if (error) { alert('Error: ' + error.message); return }
-  // Actualizar el paciente en memoria
-  setPacienteSeleccionado(prev => ({
-    ...prev,
-    odontograma: { actual: odontogramaActual, tratado: odontogramaTratado }
-  }))
-  // Actualizar la lista de pacientes
-  await cargarPacientes()
-  alert('Odontograma guardado ✓')
-}
+    setGuardandoOdonto(true)
+    const { error } = await supabase.from('pacientes').update({
+      odontograma: { actual: odontogramaActual, tratado: odontogramaTratado }
+    }).eq('id', pacienteSeleccionado.id)
+    setGuardandoOdonto(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setPacienteSeleccionado(prev => ({
+      ...prev,
+      odontograma: { actual: odontogramaActual, tratado: odontogramaTratado }
+    }))
+    await cargarPacientes()
+    alert('Odontograma guardado ✓')
+  }
+
   async function eliminarPaciente(id) {
     if (!confirm('¿Eliminar este paciente?')) return
     await supabase.from('pacientes').delete().eq('id', id)
@@ -347,24 +516,23 @@ export default function Pacientes() {
   }
 
   async function abrirEdicion(p) {
-  const { data } = await supabase.from('paciente_archivos')
-    .select('*').eq('paciente_id', p.id).order('created_at')
-  setPacienteSeleccionado({ ...p, _archivos: data || [] })
-  setVista('editar')
-}
+    const { data } = await supabase.from('paciente_archivos')
+      .select('*').eq('paciente_id', p.id).order('created_at')
+    setPacienteSeleccionado({ ...p, _archivos: data || [] })
+    setVista('editar')
+  }
 
   async function abrirFicha(p) {
-  const { data: archivos } = await supabase.from('paciente_archivos')
-    .select('*').eq('paciente_id', p.id).order('created_at')
-  // Recargar el paciente fresco desde Supabase
-  const { data: pacFresh } = await supabase.from('pacientes')
-    .select('*').eq('id', p.id).single()
-  setPacienteSeleccionado({ ...pacFresh, _archivos: archivos || [] })
-  setOdontogramaActual(pacFresh?.odontograma?.actual || {})
-  setOdontogramaTratado(pacFresh?.odontograma?.tratado || {})
-  setTabFicha('datos')
-  setVista('ficha')
-}
+    const { data: archivos } = await supabase.from('paciente_archivos')
+      .select('*').eq('paciente_id', p.id).order('created_at')
+    const { data: pacFresh } = await supabase.from('pacientes')
+      .select('*').eq('id', p.id).single()
+    setPacienteSeleccionado({ ...pacFresh, _archivos: archivos || [] })
+    setOdontogramaActual(pacFresh?.odontograma?.actual || {})
+    setOdontogramaTratado(pacFresh?.odontograma?.tratado || {})
+    setTabFicha('datos')
+    setVista('ficha')
+  }
 
   const pacientesFiltrados = pacientes.filter(p =>
     p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -420,13 +588,13 @@ export default function Pacientes() {
           </button>
         </div>
 
-        {/* PESTAÑAS */}
         <div style={{ display:'flex', gap:'4px', borderBottom:'1px solid #eee', marginBottom:'16px' }}>
           {[
             { id:'datos', label:'👤 Datos' },
             { id:'odonto-actual', label:'🦷 Estado actual' },
             { id:'odonto-tratado', label:'✅ Tratamientos' },
             { id:'archivos', label:'📎 Archivos' },
+            { id:'historial', label:'📋 Historial clínico' },
           ].map(tab => (
             <button key={tab.id} onClick={() => setTabFicha(tab.id)}
               style={{ padding:'7px 14px', border:'none', background:'none', cursor:'pointer',
@@ -439,7 +607,6 @@ export default function Pacientes() {
           ))}
         </div>
 
-        {/* DATOS */}
         {tabFicha === 'datos' && (
           <>
             <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee', marginBottom:'12px' }}>
@@ -492,7 +659,6 @@ export default function Pacientes() {
           </>
         )}
 
-        {/* ODONTOGRAMA ESTADO ACTUAL */}
         {tabFicha === 'odonto-actual' && (
           <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee' }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
@@ -507,38 +673,36 @@ export default function Pacientes() {
           </div>
         )}
 
-        {/* ODONTOGRAMA TRATAMIENTOS */}
         {tabFicha === 'odonto-tratado' && (
-  <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee' }}>
-    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
-      <p style={{ fontSize:'13px', fontWeight:'600', color:'#111', margin:0 }}>Tratamientos realizados</p>
-      <div style={{ display:'flex', gap:'8px' }}>
-        <button onClick={() => {
-          if (!confirm('¿Copiar el Estado actual a Tratamientos? Se reemplazará lo que hay actualmente.')) return
-          setOdontogramaTratado({ ...odontogramaActual })
-        }}
-          style={{ padding:'7px 14px', background:'#f5f5f5', color:'#555',
-            border:'1px solid #ddd', borderRadius:'8px', fontSize:'12px', cursor:'pointer' }}>
-          📋 Copiar desde Estado actual
-        </button>
-        <button onClick={guardarOdontograma} disabled={guardandoOdonto}
-          style={{ padding:'7px 16px', background: guardandoOdonto ? '#aaa' : '#1D9E75', color:'#fff',
-            border:'none', borderRadius:'8px', fontSize:'12px', cursor:'pointer', fontWeight:'500' }}>
-          {guardandoOdonto ? 'Guardando...' : '💾 Guardar'}
-        </button>
-      </div>
-    </div>
-    {Object.keys(odontogramaTratado).length === 0 && (
-      <div style={{ padding:'16px', background:'#f8f8f6', borderRadius:'8px', marginBottom:'14px',
-        textAlign:'center', fontSize:'12px', color:'#888' }}>
-        Tratamientos vacíos. Usá el botón <strong>"Copiar desde Estado actual"</strong> para empezar desde el estado inicial del paciente.
-      </div>
-    )}
-    <Odontograma value={odontogramaTratado} onChange={setOdontogramaTratado} />
-  </div>
-)}
+          <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
+              <p style={{ fontSize:'13px', fontWeight:'600', color:'#111', margin:0 }}>Tratamientos realizados</p>
+              <div style={{ display:'flex', gap:'8px' }}>
+                <button onClick={() => {
+                  if (!confirm('¿Copiar el Estado actual a Tratamientos? Se reemplazará lo que hay actualmente.')) return
+                  setOdontogramaTratado({ ...odontogramaActual })
+                }}
+                  style={{ padding:'7px 14px', background:'#f5f5f5', color:'#555',
+                    border:'1px solid #ddd', borderRadius:'8px', fontSize:'12px', cursor:'pointer' }}>
+                  📋 Copiar desde Estado actual
+                </button>
+                <button onClick={guardarOdontograma} disabled={guardandoOdonto}
+                  style={{ padding:'7px 16px', background: guardandoOdonto ? '#aaa' : '#1D9E75', color:'#fff',
+                    border:'none', borderRadius:'8px', fontSize:'12px', cursor:'pointer', fontWeight:'500' }}>
+                  {guardandoOdonto ? 'Guardando...' : '💾 Guardar'}
+                </button>
+              </div>
+            </div>
+            {Object.keys(odontogramaTratado).length === 0 && (
+              <div style={{ padding:'16px', background:'#f8f8f6', borderRadius:'8px', marginBottom:'14px',
+                textAlign:'center', fontSize:'12px', color:'#888' }}>
+                Tratamientos vacíos. Usá el botón <strong>"Copiar desde Estado actual"</strong> para empezar.
+              </div>
+            )}
+            <Odontograma value={odontogramaTratado} onChange={setOdontogramaTratado} />
+          </div>
+        )}
 
-        {/* ARCHIVOS */}
         {tabFicha === 'archivos' && (
           <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee' }}>
             <p style={{ fontSize:'12px', fontWeight:'600', color:'#888', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:'12px' }}>
@@ -574,9 +738,16 @@ export default function Pacientes() {
             )}
           </div>
         )}
+
+        {tabFicha === 'historial' && (
+          <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee' }}>
+            <HistorialPaciente pacienteId={pacienteSeleccionado.id} />
+          </div>
+        )}
       </div>
     )
   }
+
   return (
     <div style={{ padding:'24px' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
