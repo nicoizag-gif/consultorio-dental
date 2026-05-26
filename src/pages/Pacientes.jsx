@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import Odontograma from '../components/Odontograma'
 
 const ANTECEDENTES = ['Diabetes','Hipertensión','Alergia a anestesia','Cardiopatía','Anticoagulantes','Embarazo']
 
@@ -18,7 +19,28 @@ function FormPaciente({ titulo, inicial, onGuardar, onVolver }) {
   const [archivos, setArchivos] = useState([])
   const [archivosExistentes, setArchivosExistentes] = useState(inicial?._archivos || [])
   const fileRef = useRef()
-
+  const [tabFicha, setTabFicha] = useState('datos')
+  const [odontogramaActual, setOdontogramaActual] = useState({})
+  const [odontogramaTratado, setOdontogramaTratado] = useState({})
+  const [guardandoOdonto, setGuardandoOdonto] = useState(false)
+async function abrirFicha(p) {
+  const { data } = await supabase.from('paciente_archivos')
+    .select('*').eq('paciente_id', p.id).order('created_at')
+  setPacienteSeleccionado({ ...p, _archivos: data || [] })
+  setOdontogramaActual(p.odontograma?.actual || {})
+  setOdontogramaTratado(p.odontograma?.tratado || {})
+  setTabFicha('datos')
+  setVista('ficha')
+}
+async function abrirFicha(p) {
+  const { data } = await supabase.from('paciente_archivos')
+    .select('*').eq('paciente_id', p.id).order('created_at')
+  setPacienteSeleccionado({ ...p, _archivos: data || [] })
+  setOdontogramaActual(p.odontograma?.actual || {})
+  setOdontogramaTratado(p.odontograma?.tratado || {})
+  setTabFicha('datos')
+  setVista('ficha')
+}
   const campo = (label, key, type='text', placeholder='') => (
     <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
       <label style={{ fontSize:'11px', color:'#666' }}>{label}</label>
@@ -232,6 +254,10 @@ export default function Pacientes() {
   const [loading, setLoading] = useState(true)
   const [vista, setVista] = useState('lista')
   const [pacienteSeleccionado, setPacienteSeleccionado] = useState(null)
+  const [tabFicha, setTabFicha] = useState('datos')
+  const [odontogramaActual, setOdontogramaActual] = useState({})
+  const [odontogramaTratado, setOdontogramaTratado] = useState({})
+  const [guardandoOdonto, setGuardandoOdonto] = useState(false)
 
   useEffect(() => { cargarPacientes() }, [])
 
@@ -297,7 +323,22 @@ export default function Pacientes() {
     setVista('lista')
     setPacienteSeleccionado(null)
   }
-
+  async function guardarOdontograma() {
+  setGuardandoOdonto(true)
+  const { error } = await supabase.from('pacientes').update({
+    odontograma: { actual: odontogramaActual, tratado: odontogramaTratado }
+  }).eq('id', pacienteSeleccionado.id)
+  setGuardandoOdonto(false)
+  if (error) { alert('Error: ' + error.message); return }
+  // Actualizar el paciente en memoria
+  setPacienteSeleccionado(prev => ({
+    ...prev,
+    odontograma: { actual: odontogramaActual, tratado: odontogramaTratado }
+  }))
+  // Actualizar la lista de pacientes
+  await cargarPacientes()
+  alert('Odontograma guardado ✓')
+}
   async function eliminarPaciente(id) {
     if (!confirm('¿Eliminar este paciente?')) return
     await supabase.from('pacientes').delete().eq('id', id)
@@ -305,17 +346,25 @@ export default function Pacientes() {
     setVista('lista')
   }
 
-  function abrirEdicion(p) {
-    setPacienteSeleccionado(p)
-    setVista('editar')
-  }
+  async function abrirEdicion(p) {
+  const { data } = await supabase.from('paciente_archivos')
+    .select('*').eq('paciente_id', p.id).order('created_at')
+  setPacienteSeleccionado({ ...p, _archivos: data || [] })
+  setVista('editar')
+}
 
   async function abrirFicha(p) {
-    const { data } = await supabase.from('paciente_archivos')
-      .select('*').eq('paciente_id', p.id).order('created_at')
-    setPacienteSeleccionado({ ...p, _archivos: data || [] })
-    setVista('ficha')
-  }
+  const { data: archivos } = await supabase.from('paciente_archivos')
+    .select('*').eq('paciente_id', p.id).order('created_at')
+  // Recargar el paciente fresco desde Supabase
+  const { data: pacFresh } = await supabase.from('pacientes')
+    .select('*').eq('id', p.id).single()
+  setPacienteSeleccionado({ ...pacFresh, _archivos: archivos || [] })
+  setOdontogramaActual(pacFresh?.odontograma?.actual || {})
+  setOdontogramaTratado(pacFresh?.odontograma?.tratado || {})
+  setTabFicha('datos')
+  setVista('ficha')
+}
 
   const pacientesFiltrados = pacientes.filter(p =>
     p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -357,8 +406,8 @@ export default function Pacientes() {
   if (vista === 'ficha' && pacienteSeleccionado) {
     const archivos = pacienteSeleccionado._archivos || []
     return (
-      <div style={{ padding:'24px', maxWidth:'700px' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'20px' }}>
+      <div style={{ padding:'24px', maxWidth:'800px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'16px' }}>
           <button onClick={() => setVista('lista')}
             style={{ padding:'6px 12px', border:'1px solid #ddd', borderRadius:'8px', background:'#fff', cursor:'pointer', fontSize:'13px' }}>
             ← Volver
@@ -371,94 +420,163 @@ export default function Pacientes() {
           </button>
         </div>
 
-        <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee', marginBottom:'12px' }}>
-          <p style={{ fontSize:'12px', fontWeight:'600', color:'#888', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:'12px' }}>
-            Datos personales
-          </p>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
-            {[
-              ['DNI', pacienteSeleccionado.dni],
-              ['Fecha de nacimiento', pacienteSeleccionado.fecha_nacimiento?.split('-').reverse().join('/')],
-              ['Teléfono', pacienteSeleccionado.telefono],
-              ['Email', pacienteSeleccionado.email],
-              ['WhatsApp', pacienteSeleccionado.whatsapp],
-              ['Obra social', pacienteSeleccionado.obra_social],
-              ['N° afiliado', pacienteSeleccionado.nro_afiliado],
-              ['Domicilio', pacienteSeleccionado.domicilio],
-              ['Localidad', pacienteSeleccionado.localidad],
-              ['Ocupación', pacienteSeleccionado.ocupacion],
-              ['Notificación', pacienteSeleccionado.preferencia_notif],
-            ].filter(([,v]) => v).map(([label, valor]) => (
-              <div key={label}>
-                <p style={{ fontSize:'11px', color:'#888', margin:'0 0 2px' }}>{label}</p>
-                <p style={{ fontSize:'13px', color:'#111', margin:0, fontWeight:'500' }}>{valor}</p>
-              </div>
-            ))}
-          </div>
+        {/* PESTAÑAS */}
+        <div style={{ display:'flex', gap:'4px', borderBottom:'1px solid #eee', marginBottom:'16px' }}>
+          {[
+            { id:'datos', label:'👤 Datos' },
+            { id:'odonto-actual', label:'🦷 Estado actual' },
+            { id:'odonto-tratado', label:'✅ Tratamientos' },
+            { id:'archivos', label:'📎 Archivos' },
+          ].map(tab => (
+            <button key={tab.id} onClick={() => setTabFicha(tab.id)}
+              style={{ padding:'7px 14px', border:'none', background:'none', cursor:'pointer',
+                fontSize:'12px', fontWeight: tabFicha === tab.id ? '600' : '400',
+                color: tabFicha === tab.id ? '#378ADD' : '#888',
+                borderBottom: tabFicha === tab.id ? '2px solid #378ADD' : '2px solid transparent',
+                marginBottom:'-1px' }}>
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        {Object.entries(pacienteSeleccionado.antecedentes || {}).filter(([,v]) => v).length > 0 && (
-          <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee', marginBottom:'12px' }}>
-            <p style={{ fontSize:'12px', fontWeight:'600', color:'#888', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:'10px' }}>
-              Antecedentes médicos
-            </p>
-            <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
-              {Object.entries(pacienteSeleccionado.antecedentes || {})
-                .filter(([,v]) => v)
-                .map(([k]) => (
-                  <span key={k} style={{ padding:'3px 10px', background:'#FAEEDA', color:'#633806',
-                    borderRadius:'20px', fontSize:'12px' }}>{k}</span>
-                ))}
-            </div>
-          </div>
-        )}
-
-        {pacienteSeleccionado.observaciones && (
-          <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee', marginBottom:'12px' }}>
-            <p style={{ fontSize:'12px', fontWeight:'600', color:'#888', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:'8px' }}>
-              Observaciones
-            </p>
-            <p style={{ fontSize:'13px', color:'#333', margin:0 }}>{pacienteSeleccionado.observaciones}</p>
-          </div>
-        )}
-
-        <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee' }}>
-          <p style={{ fontSize:'12px', fontWeight:'600', color:'#888', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:'12px' }}>
-            📎 Fichas y archivos
-          </p>
-          {archivos.length === 0 ? (
-            <p style={{ fontSize:'13px', color:'#bbb', margin:0 }}>No hay archivos cargados.</p>
-          ) : (
-            <div style={{ display:'flex', flexWrap:'wrap', gap:'10px' }}>
-              {archivos.map((a, i) => {
-                const url = getUrl(a.path)
-                return (
-                  <div key={i} style={{ width:'90px', cursor:'pointer' }} onClick={() => window.open(url)}>
-                    {a.tipo?.startsWith('image/') ? (
-                      <img src={url} alt={a.name}
-                        style={{ width:'90px', height:'90px', objectFit:'cover', borderRadius:'8px', border:'1px solid #ddd' }} />
-                    ) : (
-                      <div style={{ width:'90px', height:'90px', borderRadius:'8px', border:'1px solid #ddd',
-                        background:'#f5f5f5', display:'flex', flexDirection:'column',
-                        alignItems:'center', justifyContent:'center', gap:'4px' }}>
-                        <span style={{ fontSize:'26px' }}>📄</span>
-                        <span style={{ fontSize:'9px', color:'#888', textAlign:'center',
-                          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
-                          width:'80px', padding:'0 4px' }}>{a.name}</span>
-                      </div>
-                    )}
-                    <p style={{ fontSize:'10px', color:'#888', margin:'4px 0 0', textAlign:'center',
-                      overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.name}</p>
+        {/* DATOS */}
+        {tabFicha === 'datos' && (
+          <>
+            <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee', marginBottom:'12px' }}>
+              <p style={{ fontSize:'12px', fontWeight:'600', color:'#888', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:'12px' }}>
+                Datos personales
+              </p>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+                {[
+                  ['DNI', pacienteSeleccionado.dni],
+                  ['Fecha de nacimiento', pacienteSeleccionado.fecha_nacimiento?.split('-').reverse().join('/')],
+                  ['Teléfono', pacienteSeleccionado.telefono],
+                  ['Email', pacienteSeleccionado.email],
+                  ['WhatsApp', pacienteSeleccionado.whatsapp],
+                  ['Obra social', pacienteSeleccionado.obra_social],
+                  ['N° afiliado', pacienteSeleccionado.nro_afiliado],
+                  ['Domicilio', pacienteSeleccionado.domicilio],
+                  ['Localidad', pacienteSeleccionado.localidad],
+                  ['Ocupación', pacienteSeleccionado.ocupacion],
+                  ['Notificación', pacienteSeleccionado.preferencia_notif],
+                ].filter(([,v]) => v).map(([label, valor]) => (
+                  <div key={label}>
+                    <p style={{ fontSize:'11px', color:'#888', margin:'0 0 2px' }}>{label}</p>
+                    <p style={{ fontSize:'13px', color:'#111', margin:0, fontWeight:'500' }}>{valor}</p>
                   </div>
-                )
-              })}
+                ))}
+              </div>
             </div>
-          )}
-        </div>
+            {Object.entries(pacienteSeleccionado.antecedentes || {}).filter(([,v]) => v).length > 0 && (
+              <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee', marginBottom:'12px' }}>
+                <p style={{ fontSize:'12px', fontWeight:'600', color:'#888', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:'10px' }}>
+                  Antecedentes médicos
+                </p>
+                <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                  {Object.entries(pacienteSeleccionado.antecedentes || {})
+                    .filter(([,v]) => v)
+                    .map(([k]) => (
+                      <span key={k} style={{ padding:'3px 10px', background:'#FAEEDA', color:'#633806', borderRadius:'20px', fontSize:'12px' }}>{k}</span>
+                    ))}
+                </div>
+              </div>
+            )}
+            {pacienteSeleccionado.observaciones && (
+              <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee' }}>
+                <p style={{ fontSize:'12px', fontWeight:'600', color:'#888', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:'8px' }}>
+                  Observaciones
+                </p>
+                <p style={{ fontSize:'13px', color:'#333', margin:0 }}>{pacienteSeleccionado.observaciones}</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ODONTOGRAMA ESTADO ACTUAL */}
+        {tabFicha === 'odonto-actual' && (
+          <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
+              <p style={{ fontSize:'13px', fontWeight:'600', color:'#111', margin:0 }}>Estado actual</p>
+              <button onClick={guardarOdontograma} disabled={guardandoOdonto}
+                style={{ padding:'7px 16px', background: guardandoOdonto ? '#aaa' : '#378ADD', color:'#fff',
+                  border:'none', borderRadius:'8px', fontSize:'12px', cursor:'pointer', fontWeight:'500' }}>
+                {guardandoOdonto ? 'Guardando...' : '💾 Guardar'}
+              </button>
+            </div>
+            <Odontograma value={odontogramaActual} onChange={setOdontogramaActual} />
+          </div>
+        )}
+
+        {/* ODONTOGRAMA TRATAMIENTOS */}
+        {tabFicha === 'odonto-tratado' && (
+  <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee' }}>
+    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
+      <p style={{ fontSize:'13px', fontWeight:'600', color:'#111', margin:0 }}>Tratamientos realizados</p>
+      <div style={{ display:'flex', gap:'8px' }}>
+        <button onClick={() => {
+          if (!confirm('¿Copiar el Estado actual a Tratamientos? Se reemplazará lo que hay actualmente.')) return
+          setOdontogramaTratado({ ...odontogramaActual })
+        }}
+          style={{ padding:'7px 14px', background:'#f5f5f5', color:'#555',
+            border:'1px solid #ddd', borderRadius:'8px', fontSize:'12px', cursor:'pointer' }}>
+          📋 Copiar desde Estado actual
+        </button>
+        <button onClick={guardarOdontograma} disabled={guardandoOdonto}
+          style={{ padding:'7px 16px', background: guardandoOdonto ? '#aaa' : '#1D9E75', color:'#fff',
+            border:'none', borderRadius:'8px', fontSize:'12px', cursor:'pointer', fontWeight:'500' }}>
+          {guardandoOdonto ? 'Guardando...' : '💾 Guardar'}
+        </button>
+      </div>
+    </div>
+    {Object.keys(odontogramaTratado).length === 0 && (
+      <div style={{ padding:'16px', background:'#f8f8f6', borderRadius:'8px', marginBottom:'14px',
+        textAlign:'center', fontSize:'12px', color:'#888' }}>
+        Tratamientos vacíos. Usá el botón <strong>"Copiar desde Estado actual"</strong> para empezar desde el estado inicial del paciente.
+      </div>
+    )}
+    <Odontograma value={odontogramaTratado} onChange={setOdontogramaTratado} />
+  </div>
+)}
+
+        {/* ARCHIVOS */}
+        {tabFicha === 'archivos' && (
+          <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee' }}>
+            <p style={{ fontSize:'12px', fontWeight:'600', color:'#888', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:'12px' }}>
+              📎 Fichas y archivos
+            </p>
+            {archivos.length === 0 ? (
+              <p style={{ fontSize:'13px', color:'#bbb', margin:0 }}>No hay archivos cargados.</p>
+            ) : (
+              <div style={{ display:'flex', flexWrap:'wrap', gap:'10px' }}>
+                {archivos.map((a, i) => {
+                  const url = getUrl(a.path)
+                  return (
+                    <div key={i} style={{ width:'90px', cursor:'pointer' }} onClick={() => window.open(url)}>
+                      {a.tipo?.startsWith('image/') ? (
+                        <img src={url} alt={a.name}
+                          style={{ width:'90px', height:'90px', objectFit:'cover', borderRadius:'8px', border:'1px solid #ddd' }} />
+                      ) : (
+                        <div style={{ width:'90px', height:'90px', borderRadius:'8px', border:'1px solid #ddd',
+                          background:'#f5f5f5', display:'flex', flexDirection:'column',
+                          alignItems:'center', justifyContent:'center', gap:'4px' }}>
+                          <span style={{ fontSize:'26px' }}>📄</span>
+                          <span style={{ fontSize:'9px', color:'#888', textAlign:'center',
+                            overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                            width:'80px', padding:'0 4px' }}>{a.name}</span>
+                        </div>
+                      )}
+                      <p style={{ fontSize:'10px', color:'#888', margin:'4px 0 0', textAlign:'center',
+                        overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.name}</p>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     )
   }
-
   return (
     <div style={{ padding:'24px' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
