@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
 const HORAS = []
@@ -22,6 +22,136 @@ function getLunes(d) {
 
 function fmtDate(d) { return d.toISOString().split('T')[0] }
 
+function BuscadorPaciente({ pacientes, value, onChange }) {
+  const [query, setQuery] = useState('')
+  const [abierto, setAbierto] = useState(false)
+  const [mostrarNuevo, setMostrarNuevo] = useState(false)
+  const [formNuevo, setFormNuevo] = useState({ nombre:'', telefono:'', email:'' })
+  const [guardando, setGuardando] = useState(false)
+  const ref = useRef()
+
+  const pacienteActual = pacientes.find(p => p.id === value)
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setAbierto(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const filtrados = query.trim()
+    ? pacientes.filter(p =>
+        p.nombre.toLowerCase().includes(query.toLowerCase()) ||
+        (p.telefono || '').includes(query)
+      )
+    : pacientes
+
+  function seleccionar(p) {
+    onChange(p.id)
+    setQuery('')
+    setAbierto(false)
+    setMostrarNuevo(false)
+  }
+
+  async function crearPaciente() {
+    if (!formNuevo.nombre.trim()) { alert('El nombre es obligatorio'); return }
+    setGuardando(true)
+    const { data, error } = await supabase.from('pacientes').insert([{
+      nombre: formNuevo.nombre,
+      telefono: formNuevo.telefono || null,
+      email: formNuevo.email || null,
+    }]).select()
+    setGuardando(false)
+    if (error) { alert('Error: ' + error.message); return }
+    onChange(data[0].id)
+    setMostrarNuevo(false)
+    setAbierto(false)
+    setQuery('')
+    // Recargar pacientes
+    window.dispatchEvent(new Event('recargar-pacientes'))
+  }
+
+  return (
+    <div ref={ref} style={{ position:'relative' }}>
+      <label style={{ fontSize:'11px', color:'#666', display:'block', marginBottom:'3px' }}>Paciente</label>
+
+      {/* Campo de búsqueda */}
+      <div style={{ display:'flex', gap:'6px' }}>
+        <input
+          value={abierto ? query : (pacienteActual?.nombre || '')}
+          placeholder='Buscar paciente...'
+          onFocus={() => { setAbierto(true); setQuery('') }}
+          onChange={e => { setQuery(e.target.value); setAbierto(true) }}
+          style={{ flex:1, padding:'6px 9px', border:'1px solid #ddd', borderRadius:'7px',
+            fontSize:'13px', color:'#111' }} />
+        <button onClick={() => { setMostrarNuevo(!mostrarNuevo); setAbierto(false) }}
+          style={{ padding:'6px 10px', background:'#E1F5EE', border:'1px solid #9FE1CB',
+            borderRadius:'7px', fontSize:'11px', color:'#085041', cursor:'pointer',
+            fontWeight:'500', whiteSpace:'nowrap' }}>
+          + Nuevo
+        </button>
+      </div>
+
+      {/* Dropdown resultados */}
+      {abierto && (
+        <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#fff',
+          border:'1px solid #ddd', borderRadius:'8px', zIndex:100, maxHeight:'180px',
+          overflowY:'auto', boxShadow:'0 4px 12px rgba(0,0,0,0.1)', marginTop:'2px' }}>
+          {filtrados.length === 0 ? (
+            <p style={{ padding:'10px 12px', fontSize:'12px', color:'#888', margin:0 }}>
+              No se encontraron pacientes. Usá "+ Nuevo" para crear uno.
+            </p>
+          ) : filtrados.map(p => (
+            <div key={p.id} onClick={() => seleccionar(p)}
+              style={{ padding:'8px 12px', cursor:'pointer', borderBottom:'1px solid #f5f5f5',
+                background: value === p.id ? '#EBF4FF' : '#fff' }}
+              onMouseEnter={e => e.currentTarget.style.background='#f8f8f6'}
+              onMouseLeave={e => e.currentTarget.style.background= value === p.id ? '#EBF4FF' : '#fff'}>
+              <p style={{ fontSize:'13px', fontWeight:'500', margin:0, color:'#111' }}>{p.nombre}</p>
+              {p.telefono && <p style={{ fontSize:'11px', color:'#888', margin:0 }}>{p.telefono}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Mini form nuevo paciente */}
+      {mostrarNuevo && (
+        <div style={{ marginTop:'8px', background:'#f8f8f6', borderRadius:'10px',
+          padding:'12px', border:'1px solid #eee' }}>
+          <p style={{ fontSize:'12px', fontWeight:'600', color:'#333', margin:'0 0 8px' }}>
+            Nuevo paciente rápido
+          </p>
+          <div style={{ display:'flex', flexDirection:'column', gap:'7px' }}>
+            <input placeholder='Apellido y nombre *' value={formNuevo.nombre}
+              onChange={e => setFormNuevo(f => ({...f, nombre: e.target.value}))}
+              style={{ padding:'6px 9px', border:'1px solid #ddd', borderRadius:'7px', fontSize:'13px' }} />
+            <input placeholder='Teléfono' value={formNuevo.telefono}
+              onChange={e => setFormNuevo(f => ({...f, telefono: e.target.value}))}
+              style={{ padding:'6px 9px', border:'1px solid #ddd', borderRadius:'7px', fontSize:'13px' }} />
+            <input placeholder='Email' value={formNuevo.email}
+              onChange={e => setFormNuevo(f => ({...f, email: e.target.value}))}
+              style={{ padding:'6px 9px', border:'1px solid #ddd', borderRadius:'7px', fontSize:'13px' }} />
+          </div>
+          <div style={{ display:'flex', gap:'6px', marginTop:'8px' }}>
+            <button onClick={crearPaciente} disabled={guardando}
+              style={{ flex:1, padding:'7px', background: guardando ? '#aaa' : '#1D9E75',
+                color:'#fff', border:'none', borderRadius:'7px', fontSize:'12px',
+                cursor: guardando ? 'not-allowed' : 'pointer', fontWeight:'500' }}>
+              {guardando ? 'Guardando...' : 'Crear y seleccionar'}
+            </button>
+            <button onClick={() => setMostrarNuevo(false)}
+              style={{ padding:'7px 12px', background:'#fff', border:'1px solid #ddd',
+                borderRadius:'7px', fontSize:'12px', cursor:'pointer', color:'#666' }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Agenda() {
   const [turnos, setTurnos] = useState([])
   const [pacientes, setPacientes] = useState([])
@@ -35,13 +165,17 @@ export default function Agenda() {
   })
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => { cargarDatos() }, [])
+  useEffect(() => {
+    cargarDatos()
+    window.addEventListener('recargar-pacientes', cargarDatos)
+    return () => window.removeEventListener('recargar-pacientes', cargarDatos)
+  }, [])
 
   async function cargarDatos() {
     setLoading(true)
     const [{ data: t }, { data: p }] = await Promise.all([
       supabase.from('turnos').select('*, pacientes(nombre, telefono, obra_social)').order('fecha').order('hora'),
-      supabase.from('pacientes').select('id, nombre').order('nombre')
+      supabase.from('pacientes').select('id, nombre, telefono').order('nombre')
     ])
     setTurnos(t || [])
     setPacientes(p || [])
@@ -60,12 +194,9 @@ export default function Agenda() {
 
   async function guardarEdicion() {
     const { error } = await supabase.from('turnos').update({
-      fecha: turnoDetalle.fecha,
-      hora: turnoDetalle.hora,
-      motivo: turnoDetalle.motivo,
-      duracion: turnoDetalle.duracion,
-      observaciones: turnoDetalle.observaciones,
-      estado: turnoDetalle.estado,
+      fecha: turnoDetalle.fecha, hora: turnoDetalle.hora,
+      motivo: turnoDetalle.motivo, duracion: turnoDetalle.duracion,
+      observaciones: turnoDetalle.observaciones, estado: turnoDetalle.estado,
     }).eq('id', turnoDetalle.id)
     if (error) { alert('Error: ' + error.message); return }
     await cargarDatos()
@@ -103,17 +234,13 @@ export default function Agenda() {
   })
   const hoy = fmtDate(new Date())
   const horaActual = new Date().toTimeString().slice(0,5)
-
   const turnoEnCelda = (fecha, hora) =>
     turnos.find(t => t.fecha === fecha && t.hora.slice(0,5) === hora)
-
   const estadoColor = { confirmado:'#1D9E75', pendiente:'#EF9F27', cancelado:'#E24B4A' }
   const estadoBg = { confirmado:'#E1F5EE', pendiente:'#FAEEDA', cancelado:'#FCEBEB' }
 
   return (
     <div style={{ display:'flex', height:'100vh', overflow:'hidden' }}>
-
-      {/* GRILLA PRINCIPAL */}
       <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
 
         {/* HEADER */}
@@ -149,9 +276,7 @@ export default function Agenda() {
               <thead style={{ position:'sticky', top:0, zIndex:10 }}>
                 <tr>
                   <th style={{ width:'52px', background:'#DCDCDC', border:'1px solid #ccc',
-                    padding:'8px 4px', fontSize:'11px', color:'#555' }}>
-                    Hora
-                  </th>
+                    padding:'8px 4px', fontSize:'11px', color:'#555' }}>Hora</th>
                   {semana.map(dia => {
                     const fecha = fmtDate(dia)
                     const esHoy = fecha === hoy
@@ -159,8 +284,7 @@ export default function Agenda() {
                     return (
                       <th key={fecha} style={{
                         background: esHoy ? '#BBDEFB' : '#EBEBEB',
-                        border:'1px solid #ccc',
-                        padding:'8px 4px',
+                        border:'1px solid #ccc', padding:'8px 4px',
                         fontSize:'12px', fontWeight:'600',
                         color: esHoy ? '#1565C0' : '#444',
                         textAlign:'center', minWidth:'120px'
@@ -185,9 +309,8 @@ export default function Agenda() {
                         color: esHoraActual ? '#1565C0' : '#666',
                         fontWeight: esHoraActual ? '700' : '400',
                         background: esMediaHora ? '#E8E8E8' : '#DCDCDC',
-                        border:'1px solid #ccc',
-                        textAlign:'right', whiteSpace:'nowrap',
-                        verticalAlign:'top', paddingTop:'3px', width:'52px'
+                        border:'1px solid #ccc', textAlign:'right',
+                        whiteSpace:'nowrap', verticalAlign:'top', paddingTop:'3px', width:'52px'
                       }}>
                         {!esMediaHora ? hora : '· · ·'}
                       </td>
@@ -244,7 +367,7 @@ export default function Agenda() {
 
       {/* PANEL LATERAL */}
       {(showForm || turnoDetalle) && (
-        <div style={{ width:'300px', flexShrink:0, background:'#fff', borderLeft:'1px solid #ddd',
+        <div style={{ width:'320px', flexShrink:0, background:'#fff', borderLeft:'1px solid #ddd',
           overflowY:'auto', display:'flex', flexDirection:'column' }}>
           <div style={{ padding:'16px 20px', borderBottom:'1px solid #eee',
             display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -260,37 +383,34 @@ export default function Agenda() {
             {/* FORM NUEVO TURNO */}
             {showForm && (
               <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-                <div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>
-                  <label style={{ fontSize:'11px', color:'#666' }}>Paciente</label>
-                  <select value={form.paciente_id} onChange={e => setForm({...form, paciente_id: e.target.value})}
-                    style={{ padding:'6px 9px', border:'1px solid #ddd', borderRadius:'7px', fontSize:'13px' }}>
-                    <option value=''>— Seleccioná —</option>
-                    {pacientes.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                  </select>
-                </div>
+                <BuscadorPaciente
+                  pacientes={pacientes}
+                  value={form.paciente_id}
+                  onChange={id => setForm(f => ({...f, paciente_id: id}))}
+                />
                 <div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>
                   <label style={{ fontSize:'11px', color:'#666' }}>Fecha</label>
                   <input type='date' value={form.fecha}
-                    onChange={e => setForm({...form, fecha: e.target.value})}
+                    onChange={e => setForm(f => ({...f, fecha: e.target.value}))}
                     style={{ padding:'6px 9px', border:'1px solid #ddd', borderRadius:'7px', fontSize:'13px' }} />
                 </div>
                 <div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>
                   <label style={{ fontSize:'11px', color:'#666' }}>Hora</label>
-                  <select value={form.hora} onChange={e => setForm({...form, hora: e.target.value})}
+                  <select value={form.hora} onChange={e => setForm(f => ({...f, hora: e.target.value}))}
                     style={{ padding:'6px 9px', border:'1px solid #ddd', borderRadius:'7px', fontSize:'13px' }}>
                     {HORAS.map(h => <option key={h} value={h}>{h}</option>)}
                   </select>
                 </div>
                 <div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>
                   <label style={{ fontSize:'11px', color:'#666' }}>Prestación</label>
-                  <select value={form.motivo} onChange={e => setForm({...form, motivo: e.target.value})}
+                  <select value={form.motivo} onChange={e => setForm(f => ({...f, motivo: e.target.value}))}
                     style={{ padding:'6px 9px', border:'1px solid #ddd', borderRadius:'7px', fontSize:'13px' }}>
                     {MOTIVOS.map(m => <option key={m} value={m}>{m}</option>)}
                   </select>
                 </div>
                 <div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>
                   <label style={{ fontSize:'11px', color:'#666' }}>Duración</label>
-                  <select value={form.duracion} onChange={e => setForm({...form, duracion: parseInt(e.target.value)})}
+                  <select value={form.duracion} onChange={e => setForm(f => ({...f, duracion: parseInt(e.target.value)}))}
                     style={{ padding:'6px 9px', border:'1px solid #ddd', borderRadius:'7px', fontSize:'13px' }}>
                     <option value={30}>30 min</option>
                     <option value={45}>45 min</option>
@@ -300,7 +420,7 @@ export default function Agenda() {
                 </div>
                 <div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>
                   <label style={{ fontSize:'11px', color:'#666' }}>Observaciones</label>
-                  <input value={form.observaciones} onChange={e => setForm({...form, observaciones: e.target.value})}
+                  <input value={form.observaciones} onChange={e => setForm(f => ({...f, observaciones: e.target.value}))}
                     placeholder="Indicaciones previas..."
                     style={{ padding:'6px 9px', border:'1px solid #ddd', borderRadius:'7px', fontSize:'13px' }} />
                 </div>
