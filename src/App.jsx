@@ -12,7 +12,7 @@ import Login from './pages/Login'
 import './App.css'
 
 const NAV_ITEMS = [
-  { to:'/', label:'📊 Panel principal', end:true },
+    { to:'/', label:'📊 Panel principal', end:true },
   { to:'/pacientes', label:'👤 Pacientes' },
   { to:'/agenda', label:'📅 Agenda' },
   { to:'/historial', label:'📋 Historial clínico' },
@@ -83,18 +83,19 @@ function App() {
         )}
 
         <nav style={{
-          width:'220px', background:'#1e1e2e', padding:'0', flexShrink:0,
+          width:'210px', background:'#1e1e2e', padding:'0', flexShrink:0,
           position: esCelular ? 'fixed' : 'relative',
           top:0, left:0, height:'100%', zIndex:50,
-          transform: esCelular && !menuAbierto ? 'translateX(-220px)' : 'translateX(0)',
+          transform: esCelular && !menuAbierto ? 'translateX(-210px)' : 'translateX(0)',
           transition:'transform .25s ease',
           display:'flex', flexDirection:'column'
         }}>
-          <div style={{ padding:'20px 20px 16px', borderBottom:'1px solid #333' }}>
-            <p style={{ color:'#fff', fontWeight:'600', fontSize:'15px', margin:0 }}>🦷 Consultorio</p>
+          <div style={{ padding:'18px 16px 14px', borderBottom:'1px solid #333' }}>
+            <p style={{ color:'#fff', fontWeight:'600', fontSize:'14px', margin:0 }}>🦷 Consultorio</p>
             <p style={{ color:'#aaa', fontSize:'11px', margin:'4px 0 0' }}>{nombreProfesional || 'Sistema odontológico'}</p>
           </div>
-          <div style={{ padding:'16px 12px', display:'flex', flexDirection:'column', gap:'4px', flex:1, overflowY:'auto' }}>
+
+          <div style={{ padding:'10px 10px', display:'flex', flexDirection:'column', gap:'2px', flex:1, overflowY:'auto' }}>
             {NAV_ITEMS.map(({ to, label, end }) => (
               <NavLink key={to} to={to} end={end}
                 onClick={() => esCelular && setMenuAbierto(false)}
@@ -102,13 +103,14 @@ function App() {
                   display:'block', padding:'9px 12px', borderRadius:'8px',
                   color: isActive ? '#fff' : '#aaa',
                   background: isActive ? '#378ADD' : 'transparent',
-                  textDecoration:'none', fontSize:'13px', transition:'all .15s'
-                })}>
+                  textDecoration:'none', fontSize:'14px', transition:'all .15s'
+          })}>
                 {label}
               </NavLink>
             ))}
           </div>
-          <div style={{ padding:'12px', borderTop:'1px solid #333' }}>
+
+          <div style={{ padding:'10px', borderTop:'1px solid #333' }}>
             <button onClick={handleLogout}
               style={{ width:'100%', padding:'8px', background:'transparent', color:'#888',
                 border:'1px solid #333', borderRadius:'8px', fontSize:'12px',
