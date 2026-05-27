@@ -1,7 +1,259 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import Odontograma from '../components/Odontograma'
+const PRESTACIONES_CC = ['Consulta general','Obturación','Extracción','Trat. de conducto',
+  'Limpieza / profilaxis','Corona','Ortodoncia','Control de rutina','Blanqueamiento','Otro']
 
+function CuentaCorrientePaciente({ pacienteId }) {
+  const [movimientos, setMovimientos] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [tipo, setTipo] = useState('debe')
+  const [form, setForm] = useState({
+    fecha: new Date().toISOString().split('T')[0],
+    concepto: 'Consulta general', importe: '', diente: '',
+    codigo_prestacion: '', obs: ''
+  })
+  const [guardando, setGuardando] = useState(false)
+
+  useEffect(() => { cargar() }, [pacienteId])
+
+  async function cargar() {
+    setLoading(true)
+    const { data } = await supabase.from('cuenta_corriente')
+      .select('*').eq('paciente_id', pacienteId)
+      .order('fecha').order('created_at')
+    setMovimientos(data || [])
+    setLoading(false)
+  }
+
+  async function guardar() {
+    if (!form.importe || isNaN(parseFloat(form.importe))) {
+      alert('El importe es obligatorio'); return
+    }
+    setGuardando(true)
+    const { error } = await supabase.from('cuenta_corriente').insert([{
+      paciente_id: pacienteId,
+      fecha: form.fecha,
+      concepto: tipo === 'haber' ? (form.obs || 'Pago') : form.concepto,
+      tipo,
+      importe: parseFloat(form.importe),
+      diente: form.diente || null,
+      codigo_prestacion: form.codigo_prestacion || null,
+      obs: form.obs || null,
+    }])
+    setGuardando(false)
+    if (error) { alert('Error: ' + error.message); return }
+    await cargar()
+    setShowForm(false)
+    setForm({ fecha: new Date().toISOString().split('T')[0], concepto:'Consulta general', importe:'', diente:'', codigo_prestacion:'', obs:'' })
+  }
+
+  async function eliminar(id) {
+    if (!confirm('¿Eliminar este movimiento?')) return
+    await supabase.from('cuenta_corriente').delete().eq('id', id)
+    await cargar()
+  }
+
+  const fmt = n => '$' + Math.round(n).toLocaleString('es-AR')
+  const totalDebe = movimientos.filter(m => m.tipo === 'debe').reduce((a, m) => a + m.importe, 0)
+  const totalHaber = movimientos.filter(m => m.tipo === 'haber').reduce((a, m) => a + m.importe, 0)
+  const saldo = totalDebe - totalHaber
+
+  // Saldo acumulado
+  let saldoAcum = 0
+  const conSaldo = movimientos.map(m => {
+    if (m.tipo === 'debe') saldoAcum += m.importe
+    else saldoAcum -= m.importe
+    return { ...m, saldo: saldoAcum }
+  })
+
+  return (
+    <div>
+      {/* MÉTRICAS */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px', marginBottom:'14px' }}>
+        {[
+          { label:'Total facturado', val: fmt(totalDebe), color:'#E24B4A' },
+          { label:'Total cobrado', val: fmt(totalHaber), color:'#1D9E75' },
+          { label:'Saldo pendiente', val: fmt(Math.abs(saldo)), color: saldo > 0 ? '#E24B4A' : '#1D9E75' },
+        ].map(({ label, val, color }) => (
+          <div key={label} style={{ background:'#f8f8f6', borderRadius:'10px', padding:'10px 14px', border:'1px solid #eee' }}>
+            <p style={{ fontSize:'10px', color:'#888', margin:'0 0 3px' }}>{label}</p>
+            <p style={{ fontSize:'16px', fontWeight:'600', margin:0, color }}>{val}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* BOTÓN NUEVO */}
+      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:'10px' }}>
+        <button onClick={() => setShowForm(!showForm)}
+          style={{ padding:'7px 14px', background:'#378ADD', color:'#fff', border:'none',
+            borderRadius:'8px', fontSize:'12px', cursor:'pointer', fontWeight:'500' }}>
+          + Nuevo movimiento
+        </button>
+      </div>
+
+      {/* FORMULARIO */}
+      {showForm && (
+        <div style={{ background:'#f8f8f6', borderRadius:'12px', padding:'16px',
+          marginBottom:'14px', border:'1px solid #eee' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' }}>
+            <p style={{ fontWeight:'600', fontSize:'13px', margin:0 }}>Nuevo movimiento</p>
+            <button onClick={() => setShowForm(false)}
+              style={{ border:'none', background:'none', cursor:'pointer', fontSize:'18px', color:'#888' }}>×</button>
+          </div>
+
+          {/* TIPO */}
+          <div style={{ display:'flex', gap:'8px', marginBottom:'12px' }}>
+            {['debe','haber'].map(t => (
+              <button key={t} onClick={() => setTipo(t)}
+                style={{ flex:1, padding:'7px', border:'none', borderRadius:'8px', cursor:'pointer',
+                  fontSize:'12px', fontWeight:'500',
+                  background: tipo === t ? (t === 'debe' ? '#FCEBEB' : '#E1F5EE') : '#f0f0f0',
+                  color: tipo === t ? (t === 'debe' ? '#E24B4A' : '#1D9E75') : '#888',
+                  outline: tipo === t ? `1.5px solid ${t === 'debe' ? '#E24B4A' : '#1D9E75'}` : 'none' }}>
+                {t === 'debe' ? '↑ Prestación / Debe' : '↓ Pago / Haber'}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+              <div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>
+                <label style={{ fontSize:'11px', color:'#666' }}>Fecha</label>
+                <input type='date' value={form.fecha}
+                  onChange={e => setForm(f => ({...f, fecha: e.target.value}))}
+                  style={{ padding:'6px 9px', border:'1px solid #ddd', borderRadius:'7px', fontSize:'13px' }} />
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>
+                <label style={{ fontSize:'11px', color:'#666' }}>Importe ($)</label>
+                <input type='number' placeholder='0' value={form.importe}
+                  onChange={e => setForm(f => ({...f, importe: e.target.value}))}
+                  style={{ padding:'6px 9px', border:'1px solid #ddd', borderRadius:'7px', fontSize:'13px' }} />
+              </div>
+            </div>
+
+            {tipo === 'debe' && (
+              <>
+                <div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>
+                  <label style={{ fontSize:'11px', color:'#666' }}>Prestación</label>
+                  <select value={form.concepto}
+                    onChange={e => setForm(f => ({...f, concepto: e.target.value}))}
+                    style={{ padding:'6px 9px', border:'1px solid #ddd', borderRadius:'7px', fontSize:'13px' }}>
+                    {PRESTACIONES_CC.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>
+                    <label style={{ fontSize:'11px', color:'#666' }}>Diente (opcional)</label>
+                    <input placeholder='Ej: 16' value={form.diente}
+                      onChange={e => setForm(f => ({...f, diente: e.target.value}))}
+                      style={{ padding:'6px 9px', border:'1px solid #ddd', borderRadius:'7px', fontSize:'13px' }} />
+                  </div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>
+                    <label style={{ fontSize:'11px', color:'#666' }}>Código (opcional)</label>
+                    <input placeholder='Ej: 01.01' value={form.codigo_prestacion}
+                      onChange={e => setForm(f => ({...f, codigo_prestacion: e.target.value}))}
+                      style={{ padding:'6px 9px', border:'1px solid #ddd', borderRadius:'7px', fontSize:'13px' }} />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {tipo === 'haber' && (
+              <div style={{ display:'flex', flexDirection:'column', gap:'3px' }}>
+                <label style={{ fontSize:'11px', color:'#666' }}>Concepto de pago</label>
+                <input placeholder='Ej: Efectivo, Transferencia...' value={form.obs}
+                  onChange={e => setForm(f => ({...f, obs: e.target.value}))}
+                  style={{ padding:'6px 9px', border:'1px solid #ddd', borderRadius:'7px', fontSize:'13px' }} />
+              </div>
+            )}
+          </div>
+
+          <button onClick={guardar} disabled={guardando}
+            style={{ width:'100%', marginTop:'12px', padding:'9px',
+              background: guardando ? '#aaa' : tipo === 'debe' ? '#E24B4A' : '#1D9E75',
+              color:'#fff', border:'none', borderRadius:'8px', fontSize:'13px',
+              fontWeight:'500', cursor: guardando ? 'not-allowed' : 'pointer' }}>
+            {guardando ? 'Guardando...' : 'Registrar movimiento'}
+          </button>
+        </div>
+      )}
+
+      {/* TABLA */}
+      {loading ? <p style={{ color:'#888', fontSize:'13px' }}>Cargando...</p> :
+        movimientos.length === 0 ? (
+          <div style={{ textAlign:'center', padding:'30px', color:'#888' }}>
+            <p style={{ fontSize:'24px', margin:'0 0 6px' }}>💰</p>
+            <p style={{ fontSize:'13px', margin:0 }}>Sin movimientos registrados.</p>
+          </div>
+        ) : (
+          <>
+            <div style={{ overflowX:'auto' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+                <thead>
+                  <tr style={{ background:'#f8f8f6' }}>
+                    {['Fecha','Concepto','Diente','Tipo','Debe','Haber','Saldo',''].map(h => (
+                      <th key={h} style={{ padding:'7px 10px', textAlign: ['Debe','Haber','Saldo'].includes(h) ? 'right' : 'left',
+                        fontSize:'11px', fontWeight:'500', color:'#888', borderBottom:'1px solid #eee' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {conSaldo.map(m => (
+                    <tr key={m.id} style={{ borderBottom:'1px solid #f5f5f5' }}>
+                      <td style={{ padding:'7px 10px', color:'#888', whiteSpace:'nowrap' }}>
+                        {m.fecha?.split('-').reverse().join('/')}
+                      </td>
+                      <td style={{ padding:'7px 10px', fontWeight:'500' }}>{m.concepto}</td>
+                      <td style={{ padding:'7px 10px', textAlign:'center', color:'#888' }}>{m.diente || '—'}</td>
+                      <td style={{ padding:'7px 10px' }}>
+                        <span style={{ fontSize:'10px', padding:'2px 7px', borderRadius:'20px',
+                          background: m.tipo === 'debe' ? '#FCEBEB' : '#E1F5EE',
+                          color: m.tipo === 'debe' ? '#E24B4A' : '#1D9E75' }}>
+                          {m.tipo === 'debe' ? 'Prestación' : 'Pago'}
+                        </span>
+                      </td>
+                      <td style={{ padding:'7px 10px', textAlign:'right', color:'#E24B4A', fontWeight:'500' }}>
+                        {m.tipo === 'debe' ? fmt(m.importe) : '—'}
+                      </td>
+                      <td style={{ padding:'7px 10px', textAlign:'right', color:'#1D9E75', fontWeight:'500' }}>
+                        {m.tipo === 'haber' ? fmt(m.importe) : '—'}
+                      </td>
+                      <td style={{ padding:'7px 10px', textAlign:'right', fontWeight:'600',
+                        color: m.saldo > 0 ? '#E24B4A' : '#1D9E75' }}>
+                        {fmt(Math.abs(m.saldo))} {m.saldo > 0 ? 'D' : 'H'}
+                      </td>
+                      <td style={{ padding:'7px 10px' }}>
+                        <button onClick={() => eliminar(m.id)}
+                          style={{ padding:'3px 7px', background:'#FCEBEB', border:'none',
+                            borderRadius:'5px', color:'#E24B4A', fontSize:'11px', cursor:'pointer' }}>
+                          🗑
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background:'#f8f8f6', fontWeight:'600' }}>
+                    <td colSpan={4} style={{ padding:'7px 10px', fontSize:'12px' }}>Total</td>
+                    <td style={{ padding:'7px 10px', textAlign:'right', color:'#E24B4A' }}>{fmt(totalDebe)}</td>
+                    <td style={{ padding:'7px 10px', textAlign:'right', color:'#1D9E75' }}>{fmt(totalHaber)}</td>
+                    <td style={{ padding:'7px 10px', textAlign:'right',
+                      color: saldo > 0 ? '#E24B4A' : '#1D9E75' }}>
+                      {fmt(Math.abs(saldo))} {saldo > 0 ? 'D' : 'H'}
+                    </td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </>
+        )
+      }
+    </div>
+  )
+}
 const ANTECEDENTES = ['Diabetes','Hipertensión','Alergia a anestesia','Cardiopatía','Anticoagulantes','Embarazo']
 
 const FORM_VACIO = {
@@ -595,6 +847,7 @@ export default function Pacientes() {
             { id:'odonto-tratado', label:'✅ Tratamientos' },
             { id:'archivos', label:'📎 Archivos' },
             { id:'historial', label:'📋 Historial clínico' },
+            { id:'cuenta', label:'💰 Cuenta corriente' },
           ].map(tab => (
             <button key={tab.id} onClick={() => setTabFicha(tab.id)}
               style={{ padding:'7px 14px', border:'none', background:'none', cursor:'pointer',
@@ -744,6 +997,11 @@ export default function Pacientes() {
             <HistorialPaciente pacienteId={pacienteSeleccionado.id} />
           </div>
         )}
+        {tabFicha === 'cuenta' && (
+  <div style={{ background:'#fff', borderRadius:'14px', padding:'20px', border:'1px solid #eee' }}>
+    <CuentaCorrientePaciente pacienteId={pacienteSeleccionado.id} />
+  </div>
+)}
       </div>
     )
   }
