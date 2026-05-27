@@ -100,7 +100,9 @@ export default function Dashboard() {
       {/* HEADER */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'28px' }}>
         <div>
-          <h1 style={{ fontSize:'24px', fontWeight:'600', margin:'0 0 4px' }}>Buenos días 👋</h1>
+          <h1 style={{ fontSize:'24px', fontWeight:'600', margin:'0 0 4px' }}>
+          {ahora.getHours() < 12 ? 'Buenos días 🌅' : ahora.getHours() < 19 ? 'Buenas tardes ☀️' : 'Buenas noches 🌙'}
+          </h1>
           <p style={{ color:'#888', fontSize:'13px', margin:0 }}>{fechaLabel}</p>
         </div>
         <div style={{ textAlign:'right' }}>
