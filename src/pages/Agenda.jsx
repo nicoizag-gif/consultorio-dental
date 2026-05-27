@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 const HORAS = []
 for (let h = 8; h <= 21; h++) {
   HORAS.push(`${String(h).padStart(2,'0')}:00`)
-  if (h < 21) HORAS.push(`${String(h).padStart(2,'0')}:30`)
+  if (h < 21) HORAS.push(`${String(h).padStart(2,'00')}:30`)
 }
 
 const DIAS_SEMANA = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom']
@@ -68,15 +68,12 @@ function BuscadorPaciente({ pacientes, value, onChange }) {
     setMostrarNuevo(false)
     setAbierto(false)
     setQuery('')
-    // Recargar pacientes
     window.dispatchEvent(new Event('recargar-pacientes'))
   }
 
   return (
     <div ref={ref} style={{ position:'relative' }}>
       <label style={{ fontSize:'11px', color:'#666', display:'block', marginBottom:'3px' }}>Paciente</label>
-
-      {/* Campo de búsqueda */}
       <div style={{ display:'flex', gap:'6px' }}>
         <input
           value={abierto ? query : (pacienteActual?.nombre || '')}
@@ -93,7 +90,6 @@ function BuscadorPaciente({ pacientes, value, onChange }) {
         </button>
       </div>
 
-      {/* Dropdown resultados */}
       {abierto && (
         <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#fff',
           border:'1px solid #ddd', borderRadius:'8px', zIndex:100, maxHeight:'180px',
@@ -115,7 +111,6 @@ function BuscadorPaciente({ pacientes, value, onChange }) {
         </div>
       )}
 
-      {/* Mini form nuevo paciente */}
       {mostrarNuevo && (
         <div style={{ marginTop:'8px', background:'#f8f8f6', borderRadius:'10px',
           padding:'12px', border:'1px solid #eee' }}>
@@ -184,12 +179,32 @@ export default function Agenda() {
 
   async function guardarTurno() {
     if (!form.paciente_id) { alert('Seleccioná un paciente'); return }
-    if (!form.fecha) { alert('Seleccioná una fecha'); return }
-    const { error } = await supabase.from('turnos').insert([form])
-    if (error) { alert('Error: ' + error.message); return }
-    await cargarDatos()
-    setShowForm(false)
-    setForm({ paciente_id:'', fecha:'', hora:'08:00', motivo:'Consulta general', duracion:60, observaciones:'' })
+  if (!form.fecha) { alert('Seleccioná una fecha'); return }
+
+  // Validar superposición
+  const [fh, fm] = form.hora.split(':').map(Number)
+  const inicioNuevo = fh * 60 + fm
+  const finNuevo = inicioNuevo + (form.duracion || 60)
+
+  const hayConflicto = turnos.some(t => {
+    if (t.fecha !== form.fecha) return false
+    const [th, tm] = t.hora.slice(0,5).split(':').map(Number)
+    const inicioExistente = th * 60 + tm
+    const finExistente = inicioExistente + (t.duracion || 60)
+    return inicioNuevo < finExistente && finNuevo > inicioExistente
+  })
+
+  if (hayConflicto) {
+    alert('⚠️  Verificar horario del turno, se superpone con otro existente.') 
+    return
+  }
+
+  const { error } = await supabase.from('turnos').insert([form])
+  if (error) { alert('Error: ' + error.message); return }
+  await cargarDatos()
+  setShowForm(false)
+  setForm({ paciente_id:'', fecha:'', hora:'08:00', motivo:'Consulta general', duracion:60, observaciones:'' })
+
   }
 
   async function guardarEdicion() {
@@ -234,8 +249,22 @@ export default function Agenda() {
   })
   const hoy = fmtDate(new Date())
   const horaActual = new Date().toTimeString().slice(0,5)
+
   const turnoEnCelda = (fecha, hora) =>
     turnos.find(t => t.fecha === fecha && t.hora.slice(0,5) === hora)
+
+  const celdaBloqueada = (fecha, hora) => {
+    return turnos.find(t => {
+      if (t.fecha !== fecha) return false
+      const [th, tm] = t.hora.slice(0,5).split(':').map(Number)
+      const [hh, hm] = hora.split(':').map(Number)
+      const inicioTurno = th * 60 + tm
+      const inicioCelda = hh * 60 + hm
+      const finTurno = inicioTurno + (t.duracion || 60)
+      return inicioCelda > inicioTurno && inicioCelda < finTurno
+    })
+  }
+
   const estadoColor = { confirmado:'#1D9E75', pendiente:'#EF9F27', cancelado:'#E24B4A' }
   const estadoBg = { confirmado:'#E1F5EE', pendiente:'#FAEEDA', cancelado:'#FCEBEB' }
 
@@ -243,7 +272,6 @@ export default function Agenda() {
     <div style={{ display:'flex', height:'100vh', overflow:'hidden' }}>
       <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
 
-        {/* HEADER */}
         <div style={{ padding:'16px 20px', borderBottom:'1px solid #ddd', background:'#fff',
           display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
@@ -269,7 +297,6 @@ export default function Agenda() {
           </div>
         </div>
 
-        {/* GRILLA */}
         <div style={{ flex:1, overflowY:'auto', overflowX:'auto' }}>
           {loading ? <p style={{ padding:'20px', color:'#888' }}>Cargando...</p> : (
             <table style={{ borderCollapse:'collapse', minWidth:'900px', width:'100%' }}>
@@ -318,41 +345,52 @@ export default function Agenda() {
                         const fecha = fmtDate(dia)
                         const esHoy2 = fecha === hoy
                         const turno = turnoEnCelda(fecha, hora)
+                        const bloqueada = celdaBloqueada(fecha, hora)
                         const bgCelda = esHoraActual && esHoy2 ? '#BBDEFB' :
                                         esHoy2 ? '#E3F2FD' :
                                         esMediaHora ? '#F0F0F0' : '#FAFAFA'
                         return (
                           <td key={fecha}
-                            onClick={() => !turno && abrirFormEnCelda(fecha, hora)}
+                            onClick={() => !turno && !bloqueada && abrirFormEnCelda(fecha, hora)}
                             style={{
                               border:'1px solid #ddd',
                               borderTop: esMediaHora ? '1px dashed #D0D0D0' : '1px solid #ddd',
                               height:'28px', verticalAlign:'top',
-                              background: bgCelda,
-                              cursor: turno ? 'default' : 'pointer',
+                              background: bloqueada
+                                ? (estadoBg[bloqueada.estado] || '#f5f5f5')
+                                : bgCelda,
+                              cursor: turno || bloqueada ? 'not-allowed' : 'pointer',
                               padding:'1px', position:'relative'
                             }}
-                            onMouseEnter={e => { if (!turno) e.currentTarget.style.background = '#B3D4F0' }}
-                            onMouseLeave={e => { if (!turno) e.currentTarget.style.background = bgCelda }}>
+                            onMouseEnter={e => { if (!turno && !bloqueada) e.currentTarget.style.background = '#B3D4F0' }}
+                            onMouseLeave={e => { if (!turno && !bloqueada) e.currentTarget.style.background = bgCelda }}>
                             {turno && (
-                              <div onClick={() => abrirDetalle(turno)}
-                                style={{
-                                  background: estadoBg[turno.estado] || '#f5f5f5',
-                                  borderLeft: `3px solid ${estadoColor[turno.estado] || '#ccc'}`,
-                                  borderRadius:'3px', padding:'2px 5px',
-                                  cursor:'pointer', height:'100%', overflow:'hidden'
-                                }}>
-                                <p style={{ fontSize:'10px', fontWeight:'600', margin:0,
-                                  color: estadoColor[turno.estado],
-                                  whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                                  {turno.pacientes?.nombre?.split(',')[0] || '—'}
-                                </p>
-                                <p style={{ fontSize:'9px', margin:0, color:'#555',
-                                  whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                                  {turno.motivo}
-                                </p>
-                              </div>
-                            )}
+                <div onClick={() => abrirDetalle(turno)}
+                  style={{
+                    background: estadoBg[turno.estado] || '#f5f5f5',
+                    borderLeft: `3px solid ${estadoColor[turno.estado] || '#ccc'}`,
+                    borderRadius:'3px', padding:'2px 5px',
+                    cursor:'pointer', height:'100%', overflow:'hidden'
+                  }}>
+                  <p style={{ fontSize:'10px', fontWeight:'600', margin:0,
+                    color: estadoColor[turno.estado],
+                    whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                    {turno.pacientes?.nombre?.split(',')[0] || '—'}
+                  </p>
+                  <p style={{ fontSize:'9px', margin:0, color:'#555',
+                    whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                    {turno.motivo}
+                  </p>
+                </div>
+              )}
+              {bloqueada && !turno && (
+                <div onClick={() => abrirDetalle(bloqueada)}
+                  style={{
+                    borderLeft: `3px solid ${estadoColor[bloqueada.estado] || '#ccc'}`,
+                    height:'100%', cursor:'pointer',
+                    background: estadoBg[bloqueada.estado] || '#f5f5f5',
+                  }} />
+              )}
                           </td>
                         )
                       })}
@@ -365,7 +403,6 @@ export default function Agenda() {
         </div>
       </div>
 
-      {/* PANEL LATERAL */}
       {(showForm || turnoDetalle) && (
         <div style={{ width:'320px', flexShrink:0, background:'#fff', borderLeft:'1px solid #ddd',
           overflowY:'auto', display:'flex', flexDirection:'column' }}>
@@ -379,8 +416,6 @@ export default function Agenda() {
           </div>
 
           <div style={{ padding:'16px 20px', flex:1 }}>
-
-            {/* FORM NUEVO TURNO */}
             {showForm && (
               <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
                 <BuscadorPaciente
@@ -432,7 +467,6 @@ export default function Agenda() {
               </div>
             )}
 
-            {/* DETALLE TURNO */}
             {turnoDetalle && !showForm && (
               <>
                 <div style={{ padding:'10px', background:'#f8f8f6', borderRadius:'9px', marginBottom:'14px' }}>
