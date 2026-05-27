@@ -668,7 +668,104 @@ function FormPaciente({ titulo, inicial, onGuardar, onVolver }) {
     </div>
   )
 }
+function GrupoPacientes({ pacientes, onFicha, onEditar, onEliminar, busqueda }) {
+  const [colapsados, setColapsados] = useState(() => {
+  const init = {}
+  pacientes.forEach(p => { init[p.nombre.charAt(0).toUpperCase()] = true })
+  return init
+})
 
+  // Agrupar por primera letra
+  const grupos = pacientes.reduce((acc, p) => {
+    const letra = p.nombre.charAt(0).toUpperCase()
+    if (!acc[letra]) acc[letra] = []
+    acc[letra].push(p)
+    return acc
+  }, {})
+
+  const letras = Object.keys(grupos).sort()
+
+  function toggleLetra(letra) {
+    setColapsados(prev => ({ ...prev, [letra]: prev[letra] === false ? true : false }))
+  }
+
+  return (
+  <div>
+
+    {/* GRUPOS */}
+    {letras.map(letra => {
+      const grupo = grupos[letra]
+      const colapsado = colapsados[letra] !== false
+      return (
+        <div key={letra} id={`grupo-${letra}`} style={{ marginBottom:'4px' }}>
+          <div onClick={() => toggleLetra(letra)}
+            style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+              padding:'6px 8px', cursor:'pointer', borderRadius:'6px',
+              borderBottom:'0.5px solid #eee', marginBottom:'2px' }}
+            onMouseEnter={e => e.currentTarget.style.background='#f5f5f5'}
+            onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+            <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+              <span style={{ fontSize:'13px', fontWeight:'600', color:'#378ADD',
+                width:'20px', textAlign:'center' }}>{letra}</span>
+              <span style={{ fontSize:'11px', color:'#aaa' }}>
+                {grupo.length} paciente{grupo.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <span style={{
+              fontSize:'16px', color:'#378ADD',
+              transform: colapsado ? 'rotate(-90deg)' : 'rotate(0deg)',
+              transition:'transform .2s', display:'inline-block'
+            }}>▾</span>
+          </div>
+
+          {!colapsado && grupo.map(p => (
+            <div key={p.id}
+              style={{ display:'flex', alignItems:'center', gap:'10px',
+                padding:'7px 8px', borderRadius:'8px', cursor:'pointer' }}
+              onMouseEnter={e => e.currentTarget.style.background='#f8f8f6'}
+              onMouseLeave={e => e.currentTarget.style.background='transparent'}
+              onClick={() => onFicha(p)}>
+              <div style={{ width:'34px', height:'34px', borderRadius:'50%',
+                background:'#E6F1FB', display:'flex', alignItems:'center',
+                justifyContent:'center', fontSize:'12px', fontWeight:'500',
+                color:'#185FA5', flexShrink:0 }}>
+                {p.nombre.split(' ').map(n=>n[0]).slice(0,2).join('')}
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <p style={{ fontSize:'13px', fontWeight:'500', margin:0, color:'#111',
+                  whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.nombre}</p>
+                <p style={{ fontSize:'11px', color:'#888', margin:'1px 0 0' }}>
+                  {p.obra_social || 'Sin obra social'}
+                  {p.telefono ? ' · ' + p.telefono : ''}
+                </p>
+              </div>
+              {p.dni && (
+                <span style={{ fontSize:'10px', padding:'2px 7px', borderRadius:'20px',
+                  background:'#f0f0f0', color:'#888', whiteSpace:'nowrap', flexShrink:0 }}>
+                  DNI {p.dni}
+                </span>
+              )}
+              <div style={{ display:'flex', gap:'4px', flexShrink:0 }}
+                onClick={e => e.stopPropagation()}>
+                <button onClick={() => onEditar(p)}
+                  style={{ padding:'4px 10px', background:'#E6F1FB', border:'none',
+                    borderRadius:'6px', color:'#185FA5', fontSize:'11px', cursor:'pointer' }}>
+                  ✏️ Editar
+                </button>
+                <button onClick={() => onEliminar(p.id)}
+                  style={{ padding:'4px 8px', background:'#fff', border:'1px solid #ffcdd2',
+                    borderRadius:'6px', color:'#e53935', fontSize:'11px', cursor:'pointer' }}>
+                  🗑
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )
+    })}
+  </div>
+)
+}
 export default function Pacientes() {
   const [pacientes, setPacientes] = useState([])
   const [busqueda, setBusqueda] = useState('')
@@ -1007,66 +1104,40 @@ export default function Pacientes() {
   }
 
   return (
-    <div style={{ padding:'24px' }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
-        <div>
-          <h1 style={{ fontSize:'22px', fontWeight:'600', margin:0 }}>Pacientes</h1>
-          <p style={{ color:'#666', fontSize:'13px', margin:'4px 0 0' }}>{pacientes.length} pacientes registrados</p>
-        </div>
-        <button onClick={() => setVista('nuevo')}
-          style={{ padding:'9px 18px', background:'#378ADD', color:'#fff', border:'none',
-            borderRadius:'8px', fontSize:'13px', cursor:'pointer', fontWeight:'500' }}>
-          + Nuevo paciente
-        </button>
+  <div style={{ padding:'24px' }}>
+    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
+      <div>
+        <h1 style={{ fontSize:'22px', fontWeight:'600', margin:0 }}>Pacientes</h1>
+        <p style={{ color:'#666', fontSize:'13px', margin:'4px 0 0' }}>{pacientes.length} pacientes registrados</p>
       </div>
-
-      <input placeholder='Buscar por nombre, DNI, obra social o teléfono...'
-        value={busqueda} onChange={e => setBusqueda(e.target.value)}
-        style={{ width:'100%', padding:'10px 14px', border:'1px solid #ddd', borderRadius:'10px',
-          fontSize:'13px', marginBottom:'20px', background:'#fff' }} />
-
-      {loading ? <p style={{ color:'#888' }}>Cargando...</p> :
-        pacientesFiltrados.length === 0 ? (
-          <div style={{ textAlign:'center', padding:'60px', color:'#888' }}>
-            <p style={{ fontSize:'32px' }}>👤</p>
-            <p>No hay pacientes todavía. ¡Agregá el primero!</p>
-          </div>
-        ) : (
-          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-            {pacientesFiltrados.map(p => (
-              <div key={p.id} style={{ background:'#fff', border:'1px solid #eee', borderRadius:'12px',
-                padding:'14px 18px', display:'flex', alignItems:'center', gap:'14px' }}
-                onMouseEnter={e => e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.08)'}
-                onMouseLeave={e => e.currentTarget.style.boxShadow='none'}>
-                <div style={{ width:'42px', height:'42px', borderRadius:'50%', background:'#E6F1FB',
-                  display:'flex', alignItems:'center', justifyContent:'center',
-                  fontSize:'15px', fontWeight:'600', color:'#185FA5', flexShrink:0 }}>
-                  {p.nombre.split(' ').map(n=>n[0]).slice(0,2).join('')}
-                </div>
-                <div style={{ flex:1, cursor:'pointer' }} onClick={() => abrirFicha(p)}>
-                  <p style={{ fontWeight:'500', fontSize:'14px', margin:0, color:'#111' }}>{p.nombre}</p>
-                  <p style={{ fontSize:'12px', color:'#888', margin:'2px 0 0' }}>
-                    {p.obra_social || 'Sin obra social'} {p.telefono ? '· ' + p.telefono : ''}
-                    {p.dni ? ' · DNI ' + p.dni : ''}
-                  </p>
-                </div>
-                <div style={{ display:'flex', gap:'6px' }}>
-                  <button onClick={() => abrirEdicion(p)}
-                    style={{ padding:'5px 12px', background:'#E6F1FB', border:'none',
-                      borderRadius:'6px', color:'#185FA5', fontSize:'12px', cursor:'pointer', fontWeight:'500' }}>
-                    ✏️ Editar
-                  </button>
-                  <button onClick={() => eliminarPaciente(p.id)}
-                    style={{ padding:'5px 10px', background:'#fff', border:'1px solid #ffcdd2',
-                      borderRadius:'6px', color:'#e53935', fontSize:'12px', cursor:'pointer' }}>
-                    🗑
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )
-      }
+      <button onClick={() => setVista('nuevo')}
+        style={{ padding:'9px 18px', background:'#378ADD', color:'#fff', border:'none',
+          borderRadius:'8px', fontSize:'13px', cursor:'pointer', fontWeight:'500' }}>
+        + Nuevo paciente
+      </button>
     </div>
-  )
+
+    <input placeholder='Buscar por nombre, DNI, obra social o teléfono...'
+      value={busqueda} onChange={e => setBusqueda(e.target.value)}
+      style={{ width:'100%', padding:'10px 14px', border:'1px solid #ddd', borderRadius:'10px',
+        fontSize:'13px', marginBottom:'20px', background:'#fff' }} />
+
+    {loading ? <p style={{ color:'#888' }}>Cargando...</p> :
+      pacientesFiltrados.length === 0 ? (
+        <div style={{ textAlign:'center', padding:'60px', color:'#888' }}>
+          <p style={{ fontSize:'32px' }}>👤</p>
+          <p>No hay pacientes todavía. ¡Agregá el primero!</p>
+        </div>
+      ) : (
+        <GrupoPacientes
+          pacientes={pacientesFiltrados}
+          onFicha={abrirFicha}
+          onEditar={abrirEdicion}
+          onEliminar={eliminarPaciente}
+          busqueda={busqueda}
+        />
+      )
+    }
+  </div>
+)
 }
