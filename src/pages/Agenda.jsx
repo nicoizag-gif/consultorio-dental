@@ -178,10 +178,9 @@ export default function Agenda() {
   }
 
   async function guardarTurno() {
-    if (!form.paciente_id) { alert('Seleccioná un paciente'); return }
+  if (!form.paciente_id) { alert('Seleccioná un paciente'); return }
   if (!form.fecha) { alert('Seleccioná una fecha'); return }
 
-  // Validar superposición
   const [fh, fm] = form.hora.split(':').map(Number)
   const inicioNuevo = fh * 60 + fm
   const finNuevo = inicioNuevo + (form.duracion || 60)
@@ -195,17 +194,44 @@ export default function Agenda() {
   })
 
   if (hayConflicto) {
-    alert('⚠️  Verificar horario del turno, se superpone con otro existente.') 
+    alert('⚠️ Ya hay un turno en ese horario. Por favor elegí otro horario.')
     return
   }
 
   const { error } = await supabase.from('turnos').insert([form])
   if (error) { alert('Error: ' + error.message); return }
+
+  // Enviar email de confirmación si el paciente tiene email
+  const paciente = pacientes.find(p => p.id === form.paciente_id)
+  if (paciente?.email) {
+    try {
+      // Cargar datos del profesional
+      const { data: config } = await supabase.from('configuracion').select('*').limit(1)
+      const prof = config?.[0]
+      await fetch('/api/enviar-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: paciente.email,
+          paciente: paciente.nombre,
+          fecha: form.fecha,
+          hora: form.hora,
+          motivo: form.motivo,
+          duracion: form.duracion,
+          direccion: prof?.direccion ? `${prof.direccion}, ${prof.localidad || ''}` : '',
+          profesional: prof ? `${prof.nombre} ${prof.apellido} — ${prof.especialidad || ''}` : '',
+          esRecordatorio: false
+        })
+      })
+    } catch (e) {
+      console.log('Email no enviado:', e)
+    }
+  }
+
   await cargarDatos()
   setShowForm(false)
   setForm({ paciente_id:'', fecha:'', hora:'08:00', motivo:'Consulta general', duracion:60, observaciones:'' })
-
-  }
+}
 
   async function guardarEdicion() {
     const { error } = await supabase.from('turnos').update({
