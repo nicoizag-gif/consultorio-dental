@@ -170,7 +170,7 @@ export default function Agenda() {
     setLoading(true)
     const [{ data: t }, { data: p }] = await Promise.all([
       supabase.from('turnos').select('*, pacientes(nombre, telefono, obra_social)').order('fecha').order('hora'),
-      supabase.from('pacientes').select('id, nombre, telefono, email').order('nombre')
+      supabase.from('pacientes').select('id, nombre, telefono, email, preferencia_notif').order('nombre')
     ])
     setTurnos(t || [])
     setPacientes(p || [])
@@ -203,7 +203,7 @@ export default function Agenda() {
 
   // Enviar email de confirmación si el paciente tiene email
   const paciente = pacientes.find(p => p.id === form.paciente_id)
-  if (paciente?.email) {
+  if (paciente?.email && ['email', 'ambos'].includes(paciente.preferencia_notif)) {
     try {
       // Cargar datos del profesional
       const { data: config } = await supabase.from('configuracion').select('*').limit(1)
