@@ -170,7 +170,7 @@ export default function Agenda() {
     setLoading(true)
     const [{ data: t }, { data: p }] = await Promise.all([
       supabase.from('turnos').select('*, pacientes(nombre, telefono, obra_social)').order('fecha').order('hora'),
-      supabase.from('pacientes').select('id, nombre, telefono').order('nombre')
+      supabase.from('pacientes').select('id, nombre, telefono, email').order('nombre')
     ])
     setTurnos(t || [])
     setPacientes(p || [])
