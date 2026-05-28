@@ -6,10 +6,13 @@ const supabase = createClient(
 )
 
 export default async function handler(req, res) {
-  // Seguridad: solo Vercel Cron puede llamar esta función
-  if (req.headers['authorization'] !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ error: 'Unauthorized' })
+  try {
+    // ... todo el código actual ...
+  } catch (err) {
+    console.error('ERROR GENERAL:', err.message, err.stack)
+    return res.status(500).json({ error: err.message })
   }
+}
 
   // Calcular fecha de mañana
   const manana = new Date()
