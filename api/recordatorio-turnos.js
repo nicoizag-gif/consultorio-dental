@@ -1,57 +1,67 @@
-import { createClient } from '@supabase/supabase-js'
- 
 export default async function handler(req, res) {
   console.log('Iniciando recordatorio-turnos...')
   
   try {
     const supabaseUrl = process.env.SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_ANON_KEY
-
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
     
     console.log('SUPABASE_URL:', supabaseUrl ? 'OK' : 'FALTA')
     console.log('KEY preview:', supabaseKey?.substring(0, 20))
     console.log('VITE_APP_URL:', process.env.VITE_APP_URL ? 'OK' : 'FALTA')
- 
+
     if (!supabaseUrl || !supabaseKey) {
       return res.status(500).json({ error: 'Faltan variables de entorno de Supabase' })
     }
- 
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-})
- 
+
+    const headers = {
+      'apikey': supabaseKey,
+      'Authorization': `Bearer ${supabaseKey}`,
+      'Content-Type': 'application/json'
+    }
+
     const manana = new Date()
     manana.setDate(manana.getDate() + 1)
     const fechaManana = manana.toISOString().split('T')[0]
     console.log('Buscando turnos para:', fechaManana)
- 
-    const { data: turnos, error } = await supabase
-      .from('turnos')
-      .select('*, pacientes(nombre, email, preferencia_notif)')
-      .eq('fecha', fechaManana)
-      .neq('estado', 'cancelado')
- 
-    if (error) {
-      console.error('Error Supabase:', error.message)
-      return res.status(500).json({ error: error.message })
+
+    const turnosRes = await fetch(
+      `${supabaseUrl}/rest/v1/turnos?fecha=eq.${fechaManana}&estado=neq.cancelado&select=*`,
+      { headers }
+    )
+
+    if (!turnosRes.ok) {
+      const err = await turnosRes.text()
+      console.error('Error fetch turnos:', err)
+      return res.status(500).json({ error: err })
     }
- 
-    console.log('Turnos encontrados:', turnos?.length || 0)
- 
-    const { data: config } = await supabase.from('configuracion').select('*').limit(1)
-    const prof = config?.[0]
+
+    const turnos = await turnosRes.json()
+    console.log('Turnos encontrados:', turnos.length)
+
+    const configRes = await fetch(
+      `${supabaseUrl}/rest/v1/configuracion?select=*&limit=1`,
+      { headers }
+    )
+    const configData = await configRes.json()
+    const prof = configData?.[0]
+
     const resultados = []
- 
+
     for (const turno of turnos) {
-      const paciente = turno.pacientes
+      const pacRes = await fetch(
+        `${supabaseUrl}/rest/v1/pacientes?id=eq.${turno.paciente_id}&select=nombre,email,preferencia_notif`,
+        { headers }
+      )
+      const pacData = await pacRes.json()
+      const paciente = pacData?.[0]
+
+      console.log('Paciente:', paciente?.nombre, '| Email:', paciente?.email, '| Notif:', paciente?.preferencia_notif)
+
       if (!paciente?.email || !['email', 'ambos'].includes(paciente.preferencia_notif)) {
         resultados.push({ turno: turno.id, status: 'omitido' })
         continue
       }
- 
+
       try {
         const appUrl = process.env.VITE_APP_URL || 'https://consultorio-dental-jade.vercel.app'
         const response = await fetch(`${appUrl}/api/enviar-email`, {
@@ -82,7 +92,7 @@ export default async function handler(req, res) {
         resultados.push({ turno: turno.id, status: 'excepcion', detalle: e.message })
       }
     }
- 
+
     return res.status(200).json({ fecha: fechaManana, total: turnos.length, resultados })
   } catch (err) {
     console.error('ERROR GENERAL:', err.message, err.stack)
