@@ -5,17 +5,23 @@ export default async function handler(req, res) {
   
   try {
     const supabaseUrl = process.env.SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const supabaseKey = process.env.SUPABASE_ANON_KEY
+
     
     console.log('SUPABASE_URL:', supabaseUrl ? 'OK' : 'FALTA')
-    console.log('SUPABASE_SERVICE_ROLE_KEY:', supabaseKey ? 'OK' : 'FALTA')
+    console.log('KEY preview:', supabaseKey?.substring(0, 20))
     console.log('VITE_APP_URL:', process.env.VITE_APP_URL ? 'OK' : 'FALTA')
  
     if (!supabaseUrl || !supabaseKey) {
       return res.status(500).json({ error: 'Faltan variables de entorno de Supabase' })
     }
  
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false
+  }
+})
  
     const manana = new Date()
     manana.setDate(manana.getDate() + 1)
