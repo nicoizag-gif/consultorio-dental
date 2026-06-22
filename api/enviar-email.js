@@ -11,11 +11,12 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Faltan datos' })
   }
  
-  const fechaObj = new Date(`${fecha}T${hora}:00`)
+  const fechaObj = new Date(`${fecha}T${hora}:00-03:00`)
   const fechaFin = new Date(fechaObj.getTime() + (duracion || 60) * 60000)
  
   function fmtICS(d) {
-    return d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`
   }
  
   const ics = [
@@ -46,7 +47,7 @@ export default async function handler(req, res) {
       </div>
       <div style="background: #f8f8f6; padding: 24px; border-radius: 0 0 10px 10px; border: 1px solid #eee; border-top: none;">
         <p style="font-size: 15px; color: #333; margin: 0 0 16px;">
-          ${esRecordatorio ? `Hola <strong>${paciente}</strong>, te recordamos que manana tenes turno:` : `Hola <strong>${paciente}</strong>, tu turno fue confirmado:`}
+          ${esRecordatorio ? `Hola <strong>${paciente}</strong>, te recordamos que mañana tenes turno:` : `Hola <strong>${paciente}</strong>, tu turno fue confirmado:`}
         </p>
         <div style="background: #fff; border-radius: 8px; padding: 16px; border: 1px solid #eee; margin-bottom: 16px;">
           <table style="width: 100%; font-size: 14px; color: #333;">
@@ -79,7 +80,7 @@ export default async function handler(req, res) {
       from: `Consultorio Dental <${process.env.GMAIL_USER}>`,
       to,
       subject: esRecordatorio
-        ? `Recordatorio: turno manana ${fechaLabel} a las ${hora} hs`
+        ? `Recordatorio: turno mañana ${fechaLabel} a las ${hora} hs`
         : `Turno confirmado: ${fechaLabel} a las ${hora} hs`,
       html,
       attachments: [{
