@@ -531,22 +531,38 @@ export default function Agenda() {
                             {/* Turno principal */}
                             {turno && (
                               <div>
-                                <div onClick={e => { e.stopPropagation(); abrirDetalle(turno) }}
-                                  style={{
-                                    background: estadoBg[turno.estado] || '#f5f5f5',
-                                    borderLeft: `3px solid ${estadoColor[turno.estado] || '#ccc'}`,
-                                    borderRadius:'3px', padding:'2px 5px',
-                                    cursor:'pointer', overflow:'hidden'
-                                  }}>
-                                  <p style={{ fontSize:'10px', fontWeight:'600', margin:0,
-                                    color: estadoColor[turno.estado],
-                                    whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                                    {turno.pacientes?.nombre?.split(',')[0] || '—'}
-                                  </p>
-                                  <p style={{ fontSize:'9px', margin:0, color:'#555',
-                                    whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                                    {turno.motivo}
-                                  </p>
+                                <div style={{ position:'relative' }}>
+                                  <div onClick={e => { e.stopPropagation(); abrirDetalle(turno) }}
+                                    style={{
+                                      background: estadoBg[turno.estado] || '#f5f5f5',
+                                      borderLeft: `3px solid ${estadoColor[turno.estado] || '#ccc'}`,
+                                      borderRadius:'3px', padding:'2px 5px',
+                                      cursor:'pointer', overflow:'hidden'
+                                    }}>
+                                    <p style={{ fontSize:'10px', fontWeight:'600', margin:0,
+                                      color: estadoColor[turno.estado],
+                                      whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                                      {turno.pacientes?.nombre?.split(',')[0] || '—'}
+                                    </p>
+                                    <p style={{ fontSize:'9px', margin:0, color:'#555',
+                                      whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                                      {turno.motivo}
+                                    </p>
+                                  </div>
+                                  {/* Botón ST visible para agregar sobreturno */}
+                                  {!sobreturno && (
+                                    <div onClick={e => { e.stopPropagation(); abrirSobreturnoEnCelda(fecha, hora) }}
+                                      title="Agregar sobreturno"
+                                      style={{
+                                        position:'absolute', top:'1px', right:'2px',
+                                        fontSize:'8px', fontWeight:'700', color:'#D97706',
+                                        background:'#FEF3C7', border:'1px solid #D97706',
+                                        borderRadius:'3px', padding:'0px 3px',
+                                        cursor:'pointer', lineHeight:'14px', zIndex:2
+                                      }}>
+                                      +ST
+                                    </div>
+                                  )}
                                 </div>
 
                                 {/* Sobreturno apilado debajo del turno principal */}
